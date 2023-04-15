@@ -1,0 +1,39 @@
+common:
+  log_interval: 10
+  max_epoch: 10000
+  seed: 3401
+
+datasets:
+  train_csv_path: '/mnt/lustre/sjtu/home/zkn02/EnCodec_Trainer/librispeech_train100h.csv'
+  batch_size: 2
+  tensor_cut: 3200000
+  num_workers: 0
+  fixed_length: 0
+  pin_memory: True
+
+checkpoint:
+  save_folder: './checkpoints/'
+  save_location: '${save_folder}batch${batch_size}_cut${tensor_cut}_' 
+
+optimization:
+  lr: 3e-4
+  disc_lr: 3e-4
+
+lr_scheduler:
+  warmup_epoch: 5
+
+model:
+  target_bandwidths: [1.5, 3., 6, 12., 24.]
+  sample_rate: 24_000
+  channels: 1
+  train_discriminator: True
+
+distributed:
+  data_parallel: True
+  world_size: 4
+  find_unused_parameters: False
+  torch_distributed_debug: False
+
+
+
+
