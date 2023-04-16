@@ -89,6 +89,7 @@ class BitPacker:
 
 
 class BitUnpacker:
+    #TODO: binary这部分需要重新修改下
     """BitUnpacker does the opposite of `BitPacker`.
 
     Args:

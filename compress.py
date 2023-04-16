@@ -22,6 +22,7 @@ from model import EncodecModel, EncodedFrame
 MODELS = {
     'encodec_24khz': EncodecModel.encodec_model_24khz,
     'encodec_48khz': EncodecModel.encodec_model_48khz,
+    'my_encodec':EncodecModel.my_encodec_model,
 }
 
 
@@ -89,7 +90,7 @@ def compress_to_file(model: EncodecModel, wav: torch.Tensor, fo: tp.IO[bytes],
             packer.flush()
 
 
-def decompress_from_file(fo: tp.IO[bytes], device='cpu') -> tp.Tuple[torch.Tensor, int]:
+def decompress_from_file(model:EncodecModel,fo: tp.IO[bytes], device='cpu') -> tp.Tuple[torch.Tensor, int]:
     """Decompress from a file-object.
     Returns a tuple `(wav, sample_rate)`.
 
@@ -105,9 +106,8 @@ def decompress_from_file(fo: tp.IO[bytes], device='cpu') -> tp.Tuple[torch.Tenso
     use_lm = metadata['lm']
     assert isinstance(audio_length, int)
     assert isinstance(num_codebooks, int)
-    if model_name not in MODELS:
+    if model.name not in MODELS:
         raise ValueError(f"The audio was compressed with an unsupported model {model_name}.")
-    model = MODELS[model_name]().to(device)
 
     if use_lm:
         lm = model.get_lm_model()
@@ -173,7 +173,7 @@ def compress(model: EncodecModel, wav: torch.Tensor, use_lm: bool = False) -> by
     return fo.getvalue()
 
 
-def decompress(compressed: bytes, device='cpu') -> tp.Tuple[torch.Tensor, int]:
+def decompress(model:EncodecModel,compressed: bytes, device='cpu') -> tp.Tuple[torch.Tensor, int]:
     """Decompress from a file-object.
     Returns a tuple `(wav, sample_rate)`.
 
@@ -182,7 +182,7 @@ def decompress(compressed: bytes, device='cpu') -> tp.Tuple[torch.Tensor, int]:
         device: device to use to perform the computations.
     """
     fo = io.BytesIO(compressed)
-    return decompress_from_file(fo, device=device)
+    return decompress_from_file(model,fo, device=device)
 
 
 def test():
