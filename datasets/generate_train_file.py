@@ -1,4 +1,5 @@
 import os
+import argparse
 
 def generate_csv(file_dir, csv_path):
     # 生成file_dir下所有文件的路径
@@ -12,7 +13,11 @@ def generate_csv(file_dir, csv_path):
         for file in file_list:
             f.write(file + '\n')
 
+
 if __name__ == '__main__':
-    file_dir = '/mnt/lustre/sjtu/home/zkn02/data/LibriSpeech/train-clean-100'
-    csv_path = './librispeech_train100h.csv'
-    generate_csv(file_dir, csv_path)
+    arg = argparse.ArgumentParser()
+    arg.add_argument('-i','--input_file_dir', type=str, default='./LibriSpeech/train-clean-100')
+    arg.add_argument('-o,''--output_path', type=str, default='./librispeech_train100h.csv')
+    args = arg.parse_args()
+    assert args.file_dir is not None and os.path.exists(args.file_dir), 'file_dir is not exist'
+    generate_csv(args.input_file_dir, args.output_path)
