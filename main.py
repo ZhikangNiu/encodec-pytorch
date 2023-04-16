@@ -50,6 +50,12 @@ def get_parser():
     parser.add_argument(
         '-r', '--rescale', action='store_true',
         help='Automatically rescale the output to avoid clipping.')
+    parser.add_argument(
+        '-m','--model_name', type=str, default='encodec_24khz',
+        help='support encodec_24khz,encodec_48khz,my_encodec')
+    parser.add_argument(
+        '-c','--checkpoint', type=str, 
+        help='if use my_encodec, please input checkpoint')
     return parser
 
 
@@ -100,8 +106,18 @@ def main():
             fatal(f"Output extension must be .wav or {SUFFIX}")
         check_output_exists(args)
 
-        model_name = 'encodec_48khz' if args.hq else 'encodec_24khz'
-        model = MODELS[model_name]()
+        if args.hq:
+            model_name = 'encodec_48khz'
+        else:
+            model_name = args.model_name
+
+        if model_name == 'my_encodec':
+            model = MODELS[model_name](args.checkpoint)
+        else:
+            model = MODELS[model_name]()
+        
+        print(f"-------------USE {model_name} MODEL-------------")
+
         if args.bandwidth not in model.target_bandwidths:
             fatal(f"Bandwidth {args.bandwidth} is not supported by the model {model_name}")
         model.set_target_bandwidth(args.bandwidth)
@@ -114,7 +130,7 @@ def main():
         else:
             # Directly run decompression stage
             assert args.output.suffix.lower() == '.wav'
-            out, out_sample_rate = decompress(compressed)
+            out, out_sample_rate = decompress(model,compressed)
             check_clipping(out, args)
             save_audio(out, args.output, out_sample_rate, rescale=args.rescale)
 

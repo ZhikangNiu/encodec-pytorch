@@ -159,6 +159,9 @@ class EncodecModel(nn.Module):
             scale = None
 
         emb = self.encoder(x)
+        #TODO: Encodec Trainer的training
+        if self.training:
+            return emb,scale
         codes = self.quantizer.encode(emb, self.frame_rate, self.bandwidth)
         codes = codes.transpose(0, 1)
         # codes is [B, K, T], with T frames, K nb of codebooks.
@@ -179,8 +182,11 @@ class EncodecModel(nn.Module):
 
     def _decode_frame(self, encoded_frame: EncodedFrame) -> torch.Tensor:
         codes, scale = encoded_frame
-        codes = codes.transpose(0, 1)
-        emb = self.quantizer.decode(codes)
+        if self.training:
+            emb = codes
+        else:
+            codes = codes.transpose(0, 1)
+            emb = self.quantizer.decode(codes)
         out = self.decoder(emb)
         if scale is not None:
             out = out * scale.view(-1, 1, 1)
@@ -188,7 +194,17 @@ class EncodecModel(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         frames = self.encode(x)
-        return self.decode(frames)[:, :, :x.shape[-1]]
+        if self.training:
+            loss_enc = torch.tensor([0.0], device=x.device, requires_grad=True)
+            codes = []
+            self.quantizer.train(self.training)
+            for emb,scale in frames:
+                qv = self.quantizer.forward(emb,self.frame_rate,self.bandwidth)
+                loss_enc = loss_enc + qv.penalty
+                codes.append((qv.quantized,scale))
+            return self.decode(codes)[:,:,:x.shape[-1]],loss_enc,frames
+        else:
+            return self.decode(frames)[:, :, :x.shape[-1]]
 
     def set_target_bandwidth(self, bandwidth: float):
         if bandwidth not in self.target_bandwidths:
@@ -300,6 +316,26 @@ class EncodecModel(nn.Module):
         model.eval()
         return model
 
+    #TODO: 自己实现一个encodec的model
+    @staticmethod
+    def my_encodec_model(checkpoint: str):
+        """Return the pretrained 24khz model.
+        """
+        import os
+        assert os.path.exists(checkpoint), "checkpoint not exists"
+        print("loading model from: ",checkpoint)
+        target_bandwidths = [1.5, 3., 6, 12., 24.]
+        sample_rate = 24_000
+        channels = 1
+        model = EncodecModel._get_model(
+                target_bandwidths, sample_rate, channels,
+                causal=False, model_norm='time_group_norm', audio_normalize=True,
+                segment=1., name='my_encodec')
+        pre_dic = torch.load(checkpoint)
+        model.load_state_dict({k.replace('quantizer.model','quantizer.vq'):v for k,v in pre_dic.items()})
+        model.eval()
+        return model
+
 
 def test():
     from itertools import product
@@ -307,7 +343,8 @@ def test():
     bandwidths = [3, 6, 12, 24]
     models = {
         'encodec_24khz': EncodecModel.encodec_model_24khz,
-        'encodec_48khz': EncodecModel.encodec_model_48khz
+        'encodec_48khz': EncodecModel.encodec_model_48khz,
+        "my_encodec": EncodecModel.my_encodec_model,
     }
     for model_name, bw in product(models.keys(), bandwidths):
         model = models[model_name]()

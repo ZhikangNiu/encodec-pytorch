@@ -13,7 +13,7 @@ import torch
 from torch import nn
 from einops import rearrange
 
-from .modules import NormConv2d
+from modules import NormConv2d
 
 
 FeatureMapType = tp.List[torch.Tensor]
@@ -124,6 +124,7 @@ class MultiScaleSTFTDiscriminator(nn.Module):
         fmaps = []
         for disc in self.discriminators:
             logit, fmap = disc(x)
+            #TODO: logits 是否需要downsample + scale是否对齐
             logits.append(logit)
             fmaps.append(fmap)
         return logits, fmaps
@@ -141,7 +142,27 @@ def test():
     assert all([len(fm) == 5 for fm in fmap_r + fmap_gen])
     assert all([list(f.shape)[:2] == [1, 32] for fm in fmap_r + fmap_gen for f in fm])
     assert all([len(logits.shape) == 4 for logits in y_disc_r + y_disc_gen])
-
+    ##################Zhikang Niu Test######################
+    print(type(y_disc_r))
+    print(type(fmap_r))
+    print(type(y_disc_gen))
+    print(type(fmap_gen))
+    # for logits in y_disc_gen:
+        # print(logits.shape) # [1, 1, ?, ?,]
+        # print(logits)
+    # print(len(y_disc_gen)) # len = 3
+    for fmap in fmap_gen:
+        # print(len(fmap))  # len = 5
+        # print(fmap)
+        for f in fmap:
+            print(f.shape)
+            print("---------------")
+        print("+++++++++++++++++++++")
+    # print(len(fmap_gen)) # len = 3
+    print(disc)
+    print(len(fmap_gen))
+    print(len(fmap_gen[0]))
+    print(len(y_disc_gen))
 
 if __name__ == '__main__':
     test()

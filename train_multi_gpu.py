@@ -1,8 +1,8 @@
 import os
 import torch
 import torch.optim as optim
-import datasets.customAudioDataset as data
-from datasets.customAudioDataset import collate_fn
+import customAudioDataset as data
+from customAudioDataset import collate_fn
 from utils import set_seed
 from tqdm import tqdm
 import torch.nn as nn
@@ -40,7 +40,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             logits_fake, _ = disc_model(model(input_wav)[0].detach())
             loss_disc = disc_loss(logits_real, logits_fake)
             # avoid discriminator overpower the encoder
-            loss_disc.backward() 
+            loss_disc.backward(retain_graph=True) 
             optimizer_disc.step()
   
         logits_fake, fmap_fake = disc_model(output)
@@ -70,13 +70,13 @@ def train(local_rank,world_size,config):
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
 
-    if not config.data_parallel:
+    if not config.distributed.data_parallel:
         print(config)
 
-    if config.seed is not None:
+    if config.common.seed is not None:
         set_seed(config.common.seed)
 
-    if config.fixed_length > 0:
+    if config.datasets.fixed_length > 0:
         trainset = data.CustomAudioDataset(
             config.datasets.train_csv_path,
             tensor_cut=config.datasets.tensor_cut, 
@@ -95,6 +95,8 @@ def train(local_rank,world_size,config):
                 audio_normalize=True,
                 segment=1., name='my_encodec')
     disc_model = MultiScaleSTFTDiscriminator(filters=32)
+    logger.info(f"Encodec Model Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    logger.info(f"Disc Model Parameters: {sum(p.numel() for p in disc_model.parameters() if p.requires_grad)}")
 
     logger.info(f"model train mode :{model.training} | quantizer train mode :{model.quantizer.training} ")
 
@@ -159,7 +161,10 @@ def train(local_rank,world_size,config):
     model.train()
     disc_model.train()
     for epoch in range(1, config.common.max_epoch+1):
-        train_one_step(epoch, optimizer, optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,warmup_scheduler)
+        train_one_step(
+            epoch, optimizer, optimizer_disc, 
+            model, disc_model, trainloader,config,
+            scheduler,disc_scheduler,warmup_scheduler)
             
         if epoch % config.common.log_interval == 0 and dist.get_rank()==0:
                 torch.save(model.module.state_dict(), f'{config.checkpoint.save_location}epoch{epoch}_lr{config.optimization.lr}.pt')

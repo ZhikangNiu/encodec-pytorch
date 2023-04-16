@@ -9,6 +9,7 @@ Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I hav
 - support hydra configuration management.
 - align the loss functions and hyperparameters.
 - support warmup scheduler in training.
+- support the test script to test the model.
 
 ## Enviroments
 The code is tested on the following environment:
@@ -39,13 +40,22 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train_multi_gpu.py \
                         optimization.lr=1e-4 \
                         optimization.disc_lr=1e-4 \
 ```
-#### 3. Test 
-* I haven't test the model yet.
+### Test
+I have add a shell script to compress and decompress the audio by different bandwidth, you can use the `compression.sh` to test your model. 
 
-You can use the following command to test the model:
-```bash
-python main.py 
+The script can be used as follows:
+```shell
+sh compression.sh INPUT_WAV_FILE [MODEL_NAME] [CHECKPOINT]
 ```
+- INPUT_WAV_FILE is the wav file you want to test
+- MODEL_NAME is the model name, default is `encodec_24khz`,support `encodec_48khz`, `my_encodec`
+- CHECKPOINT is the checkpoint path, when your MODEL_NAME is `my_encodec`,you can point the checkpoint
+
+if you want to test the model at a specific bandwidth, you can use the following command:
+```shell
+python main.py -r -b [bandwidth] -f [INPUT_FILE] [OUTPUT_WAV_FILE] -m [MODEL_NAME] -c [CHECKPOINT]
+```
+main.py from the [encodec](https://github.com/facebookresearch/encodec) , you can use the `-h` to check the help information.
 
 #### 4. Acknowledgement
 Thanks to the following repositories:

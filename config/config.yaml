@@ -13,7 +13,7 @@ datasets:
 
 checkpoint:
   save_folder: './checkpoints/'
-  save_location: '${save_folder}batch${batch_size}_cut${tensor_cut}_' 
+  save_location: '${checkpoint.save_folder}batch${datasets.batch_size}_cut${datasets.tensor_cut}_length${datasets.fixed_length}_' 
 
 optimization:
   lr: 3e-4

@@ -19,12 +19,17 @@ def total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output_wav, sample_
         l_f = l1Loss(fft(input_wav), fft(output_wav)) + l2Loss(fft(input_wav), fft(output_wav))
     
     #generator loss and feat loss
-    for tt1 in range(len(fmap_real)):
+    for tt1 in range(len(fmap_real)): # len(fmap_real) = 3
         l_g = l_g + torch.mean(relu(1 - logits_fake[tt1])) / len(logits_fake)
-        for tt2 in range(len(fmap_real[tt1])):
-            l_feat = l_feat + l1Loss(fmap_real[tt1][tt2].detach(), fmap_fake[tt1][tt2]) / torch.mean(torch.abs(fmap_real[tt1][tt2].detach()))
-
-    loss = 3*l_g + 3*l_feat + (l_t / 10) + l_f
+        for tt2 in range(len(fmap_real[tt1])): # len(fmap_real[tt1]) = 5
+            # l_feat = l_feat + l1Loss(fmap_real[tt1][tt2].detach(), fmap_fake[tt1][tt2]) / torch.mean(torch.abs(fmap_real[tt1][tt2].detach()))
+            l_feat = l_feat + l1Loss(fmap_real[tt1][tt2], fmap_fake[tt1][tt2]) / torch.mean(torch.abs(fmap_real[tt1][tt2]))
+    
+    KL_scale = len(fmap_real)*len(fmap_real[0]) # len(fmap_real) == len(fmap_fake) == len(logits_real) == len(logits_fake) == disc.num_discriminators == K
+    K_scale = len(fmap_real) # len(fmap_real[0]) = len(fmap_fake[0]) == L
+    
+    loss = 3*l_g/K_scale + 3*l_feat/KL_scale + (l_t / 10) + l_f
+    
     return loss
 
 def disc_loss(logits_real, logits_fake):

@@ -1,0 +1,13 @@
+CUDA_VISIBLE_DEVICES=0,1,2,3 python train_multi_gpu.py \
+                        distributed.torch_distributed_debug=False \
+                        distributed.find_unused_parameters=True \
+                        distributed.world_size=4 \
+                        common.max_epoch=200 \
+                        common.log_interval=5 \
+                        common.max_epoch=100 \
+                        datasets.tensor_cut=200000 \
+                        datasets.batch_size=4 \
+                        datasets.train_csv_path=/mnt/lustre/sjtu/home/zkn02/EnCodec_Trainer/librispeech_train100h.csv \
+                        lr_scheduler.warmup_epoch=20 \
+                        optimization.lr=1e-4 \
+                        optimization.disc_lr=1e-4 \
