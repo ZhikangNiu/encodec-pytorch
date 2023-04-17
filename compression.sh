@@ -33,11 +33,15 @@ fi
 
 cp $INPUT_FILE $OUTPUT_FILE
 
-TARGET_BANDWIDTH=(1.5 3 6 12 24)
+TARGET_BANDWIDTH=(1.5 3.0 6.0 12.0 24.0)
 for bandwidth in ${TARGET_BANDWIDTH[@]}
 do 
     OUTPUT_WAV_FILE=$OUTPUT_FILE$bandwidth.wav
     echo "OUTPUT WAV FILE -> $OUTPUT_WAV_FILE"
-    python main.py -r -b $bandwidth -f $INPUT_FILE $OUTPUT_WAV_FILE -m $MODEL_NAME -c $CHECKPOINT
+    if [ "$MODEL_NAME" = "my_encodec" ]; then
+        python main.py -r -b $bandwidth -f $INPUT_FILE $OUTPUT_WAV_FILE -m $MODEL_NAME -c $CHECKPOINT
+    else 
+        python main.py -r -b $bandwidth -f $INPUT_FILE $OUTPUT_WAV_FILE -m $MODEL_NAME
+    fi
 done
 # encodec [-r] [-b TARGET_BANDWIDTH] [-f] [--hq] [--lm] $INPUT_FILE $OUTPUT_WAV_FILE
