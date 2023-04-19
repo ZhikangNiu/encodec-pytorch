@@ -4,14 +4,14 @@ CHECKPOINT=$3
 echo "INPUT WAV FILE -> $INPUT_FILE"
 before_dot=${INPUT_FILE%%.*}
 
-if [ -z "$MODEL_NAME"]; then
+if [ -z "$MODEL_NAME" ]; then
     MODEL_NAME=encodec_24khz
 else
     MODEL_NAME=$MODEL_NAME
 fi
 
 if [ "$MODEL_NAME" = "my_encodec" ]; then
-    if [ -z "$CHECKPOINT"]; then
+    if [ -z "$CHECKPOINT" ]; then
         CHECKPOINT=/mnt/lustre/sjtu/home/zkn02/EnCodec_Trainer/outputs/2023-04-11/09-10-26/save/batch4_cut180000_lr5e-05_epoch36_lr5e-05.pt
     else
         CHECKPOINT=$CHECKPOINT

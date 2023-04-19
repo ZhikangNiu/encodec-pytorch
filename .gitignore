@@ -173,7 +173,6 @@ modules/__pycache__
 wandb/
 outputs/*
 *.log
-*.txt
 *.wav
 *.ecdc
 *.flac
