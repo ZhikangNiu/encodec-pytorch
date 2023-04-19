@@ -31,15 +31,24 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train_multi_gpu.py \
                         distributed.torch_distributed_debug=False \
                         distributed.find_unused_parameters=True \
                         distributed.world_size=4 \
-                        common.max_epoch=200 \
                         common.log_interval=5 \
                         common.max_epoch=100 \
-                        datasets.tensor_cut=200000 \
-                        datasets.train_csv_path=YOUR_PATH/librispeech_train100h.csv \
+                        datasets.tensor_cut=100000 \
+                        datasets.batch_size=8 \
+                        datasets.train_csv_path=./datasets/librispeech_train100h.csv \
                         lr_scheduler.warmup_epoch=20 \
-                        optimization.lr=1e-4 \
-                        optimization.disc_lr=1e-4 \
+                        optimization.lr=5e-5 \
+                        optimization.disc_lr=5e-5 \
 ```
+Note: 
+1. if you set a small `datasets.tensor_cut`, you can set a large `datasets.batch_size` to speed up the training process.
+2. if you encounter bug about `RuntimeError(f"Mismatch in number of params: ours is {len(params)}, at least one worker has a different one.")`. You can use a small `datasets.tensor_cut` to solve this problem.
+3. if your torch version is lower 1.8, you need to check the default value of `torch.stft(return_complex)` in the `audio_to_mel.py`  
+4. if you encounter bug about multi-gpu training, you can try to set `distributed.torch_distributed_debug=True` to get more message about this problem.
+5. the single gpu training method is similar to the multi-gpu training method, and I have not tested it.
+6. the loss is not converged to zero, but the model can be used to compress and decompress the audio. you can use the `compression.sh` to test your model in every log_interval epoch.
+7. the original paper dataset is larger than 17000h, but I only use 100h to train the model, so the model is not good enough. If you want to train a better model, you can use the larger dataset.
+8. **The code is not well tested, so there may be some bugs. If you encounter any problems, you can open an issue or contact me by email.**
 ### Test
 I have add a shell script to compress and decompress the audio by different bandwidth, you can use the `compression.sh` to test your model. 
 
@@ -49,7 +58,7 @@ sh compression.sh INPUT_WAV_FILE [MODEL_NAME] [CHECKPOINT]
 ```
 - INPUT_WAV_FILE is the wav file you want to test
 - MODEL_NAME is the model name, default is `encodec_24khz`,support `encodec_48khz`, `my_encodec`
-- CHECKPOINT is the checkpoint path, when your MODEL_NAME is `my_encodec`,you can point the checkpoint
+- CHECKPOINT is the checkpoint path, when your MODEL_NAME is `my_encodec`,you can point out the checkpoint
 
 if you want to test the model at a specific bandwidth, you can use the following command:
 ```shell
