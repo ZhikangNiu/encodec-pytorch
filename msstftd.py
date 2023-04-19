@@ -84,6 +84,15 @@ class DiscriminatorSTFT(nn.Module):
                                     norm=norm)
 
     def forward(self, x: torch.Tensor):
+        """Discriminator STFT Module is the sub module of MultiScaleSTFTDiscriminator.
+
+        Args:
+            x (torch.Tensor): input tensor of shape [B, 1, Time]
+
+        Returns:
+            z: z is the output of the last convolutional layer of shape
+            fmap: fmap is the list of feature maps of every convolutional layer of shape
+        """
         fmap = []
         z = self.spec_transform(x)  # [B, 2, Freq, Frames, 2]
         z = torch.cat([z.real, z.imag], dim=1)
@@ -120,10 +129,20 @@ class MultiScaleSTFTDiscriminator(nn.Module):
         self.num_discriminators = len(self.discriminators)
 
     def forward(self, x: torch.Tensor) -> DiscriminatorOutput:
+        """Multi-Scale STFT (MS-STFT) discriminator.
+
+        Args:
+            x (torch.Tensor): input waveform
+
+        Returns:
+            logits: list of every discriminator's output
+            fmaps: list of every discriminator's feature maps, 
+                each feature maps is a list of Discriminator STFT's every layer
+        """
         logits = []
         fmaps = []
         for disc in self.discriminators:
-            logit, fmap = disc(x)
+            logit, fmap = disc(x) #
             #TODO: logits 是否需要downsample + scale是否对齐
             logits.append(logit)
             fmaps.append(fmap)

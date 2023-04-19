@@ -4,12 +4,14 @@ CHECKPOINT=$3
 echo "INPUT WAV FILE -> $INPUT_FILE"
 before_dot=${INPUT_FILE%%.*}
 
+# check the model name is empty or encodec_24khz
 if [ -z "$MODEL_NAME" ]; then
     MODEL_NAME=encodec_24khz
 else
     MODEL_NAME=$MODEL_NAME
 fi
 
+# check the checkpoint is my_encodec, if so, set the checkpoint path
 if [ "$MODEL_NAME" = "my_encodec" ]; then
     if [ -z "$CHECKPOINT" ]; then
         CHECKPOINT=/mnt/lustre/sjtu/home/zkn02/EnCodec_Trainer/outputs/2023-04-11/09-10-26/save/batch4_cut180000_lr5e-05_epoch36_lr5e-05.pt
@@ -24,7 +26,7 @@ OUTPUT_FILE=./encodec_results/$MODEL_NAME/${before_dot##*/}/
 echo "OUTPUT FILE -> $OUTPUT_FILE"
 
 if [ ! -d "$OUTPUT_FILE" ]; then
-    # 如果路径不存在，则创建路径
+    # if the path does not exist, create it
     mkdir -p "$OUTPUT_FILE"
     echo "Created path: $OUTPUT_FILE"
 else

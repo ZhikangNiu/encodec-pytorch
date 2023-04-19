@@ -3,14 +3,16 @@ import pandas as pd
 import torch
 import torchaudio
 import random
-
+from utils import convert_audio
 
 class CustomAudioDataset(torch.utils.data.Dataset):
-    def __init__(self, csv_file, transform=None, tensor_cut=0, fixed_length=None):
-        self.audio_labels = pd.read_csv(csv_file)
+    def __init__(self, config, transform=None):
+        self.audio_labels = pd.read_csv(config.datasets.train_csv_path)
         self.transform = transform
-        self.fixed_length = fixed_length
-        self.tensor_cut = tensor_cut
+        self.fixed_length = config.datasets.fixed_length
+        self.tensor_cut = config.datasets.tensor_cut
+        self.sample_rate = config.model.sample_rate
+        self.channels = config.model.channels
 
     def __len__(self):
         if self.fixed_length:
@@ -19,16 +21,17 @@ class CustomAudioDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         waveform, sample_rate = torchaudio.load(self.audio_labels.iloc[idx, :].values[0])
+        waveform = convert_audio(waveform, sample_rate, self.sample_rate, self.channels) # convert audio to model.sample_rate, model.channel
         if self.transform:
             waveform = self.transform(waveform)
 
         if self.tensor_cut > 0:
             if waveform.size()[1] > self.tensor_cut:
-                start = random.randint(0, waveform.size()[1]-self.tensor_cut-1)
-                waveform = waveform[:, start:start+self.tensor_cut]
-                return waveform, sample_rate
+                start = random.randint(0, waveform.size()[1]-self.tensor_cut-1) # random start point
+                waveform = waveform[:, start:start+self.tensor_cut] # cut tensor
+                return waveform, self.sample_rate
             else:
-                return waveform, sample_rate
+                return waveform, self.sample_rate
         
 
 def pad_sequence(batch):

@@ -100,7 +100,7 @@ class EncodecModel(nn.Module):
         self.normalize = normalize
         self.segment = segment
         self.overlap = overlap
-        self.frame_rate = math.ceil(self.sample_rate / np.prod(self.encoder.ratios))
+        self.frame_rate = math.ceil(self.sample_rate / np.prod(self.encoder.ratios)) #75
         self.name = name
         self.bits_per_codebook = int(math.log2(self.quantizer.bins))
         assert 2 ** self.bits_per_codebook == self.quantizer.bins, \
@@ -130,8 +130,8 @@ class EncodecModel(nn.Module):
         assert x.dim() == 3
         _, channels, length = x.shape
         assert channels > 0 and channels <= 2
-        segment_length = self.segment_length
-        if segment_length is None:
+        segment_length = self.segment_length 
+        if segment_length is None: #segment_length = 1*sample_rate
             segment_length = length
             stride = length
         else:
@@ -139,13 +139,13 @@ class EncodecModel(nn.Module):
             assert stride is not None
 
         encoded_frames: tp.List[EncodedFrame] = []
-        for offset in range(0, length, stride):
+        for offset in range(0, length, stride): # shift windows to choose data
             frame = x[:, :, offset: offset + segment_length]
             encoded_frames.append(self._encode_frame(frame))
         return encoded_frames
 
     def _encode_frame(self, x: torch.Tensor) -> EncodedFrame:
-        length = x.shape[-1]
+        length = x.shape[-1] # tensor_cut or original
         duration = length / self.sample_rate
         assert self.segment is None or duration <= 1e-5 + self.segment
 
@@ -158,7 +158,7 @@ class EncodecModel(nn.Module):
         else:
             scale = None
 
-        emb = self.encoder(x)
+        emb = self.encoder(x) # [2,1,10000] -> [2,128,32]
         #TODO: Encodec Trainer的training
         if self.training:
             return emb,scale
@@ -193,17 +193,19 @@ class EncodecModel(nn.Module):
         return out
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        frames = self.encode(x)
+        frames = self.encode(x) # input_wav -> encoder , x.shape = [BatchSize,channel,tensor_cut or original length] 2,1,10000
         if self.training:
+            # if encodec is training, input_wav -> encoder -> quantizer forward -> decode
             loss_enc = torch.tensor([0.0], device=x.device, requires_grad=True)
             codes = []
             self.quantizer.train(self.training)
             for emb,scale in frames:
                 qv = self.quantizer.forward(emb,self.frame_rate,self.bandwidth)
-                loss_enc = loss_enc + qv.penalty
+                loss_enc = loss_enc + qv.penalty # loss_enc is the sum of all quantizer forward loss (RVQ commitment loss :l_w)
                 codes.append((qv.quantized,scale))
             return self.decode(codes)[:,:,:x.shape[-1]],loss_enc,frames
         else:
+            # if encodec is not training, input_wav -> encoder -> quantizer encode -> decode
             return self.decode(frames)[:, :, :x.shape[-1]]
 
     def set_target_bandwidth(self, bandwidth: float):
