@@ -177,4 +177,4 @@ outputs/*
 *.ecdc
 *.flac
 encodec_results/*
-dataset/*.csv
+datasets/*.csv
