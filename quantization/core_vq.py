@@ -47,6 +47,12 @@ def default(val: tp.Any, d: tp.Any) -> tp.Any:
 
 
 def ema_inplace(moving_avg, new, decay: float):
+    """ema update parameter. moving_avg = moving_avg + (1-decay) * new
+    Args:
+        moving_avg (_type_): 
+        new (_type_): update parameter
+        decay (float): update rate
+    """
     moving_avg.data.mul_(decay).add_(new, alpha=(1 - decay))
 
 
@@ -148,7 +154,7 @@ class EuclideanCodebook(nn.Module):
         self.cluster_size.data.copy_(cluster_size)
         self.inited.data.copy_(torch.Tensor([True]))
         # Make sure all buffers across workers are in sync after initialization
-        distrib.broadcast_tensors(self.buffers())
+        distrib.broadcast_tensors(self.buffers()) # FIXME: this is not working for some reason
 
     def replace_(self, samples, mask):
         modified_codebook = torch.where(
@@ -166,7 +172,7 @@ class EuclideanCodebook(nn.Module):
 
         batch_samples = rearrange(batch_samples, "... d -> (...) d")
         self.replace_(batch_samples, mask=expired_codes)
-        distrib.broadcast_tensors(self.buffers())
+        distrib.broadcast_tensors(self.buffers()) # FIXME: this is not working for some reason
 
     def preprocess(self, x):
         x = rearrange(x, "... d -> (...) d")
@@ -178,8 +184,8 @@ class EuclideanCodebook(nn.Module):
             x.pow(2).sum(1, keepdim=True)
             - 2 * x @ embed
             + embed.pow(2).sum(0, keepdim=True)
-        )
-        embed_ind = dist.max(dim=-1).indices
+        ) # get the distance between x and embed
+        embed_ind = dist.max(dim=-1).indices # get the index of the closest embed
         return embed_ind
 
     def postprocess_emb(self, embed_ind, shape):
@@ -205,16 +211,16 @@ class EuclideanCodebook(nn.Module):
 
     def forward(self, x):
         shape, dtype = x.shape, x.dtype
-        x = self.preprocess(x)
+        x = self.preprocess(x) # [2,32,128] -> [64,128]
 
-        self.init_embed_(x)
+        self.init_embed_(x) # to better initialize the codebook
 
-        embed_ind = self.quantize(x)
+        embed_ind = self.quantize(x) # get the index of the closest embed
         embed_onehot = F.one_hot(embed_ind, self.codebook_size).type(dtype)
         embed_ind = self.postprocess_emb(embed_ind, shape)
         quantize = self.dequantize(embed_ind)
 
-        if self.training:
+        if self.training: # update the codebook
             # We do the expiry of code at that point as buffers are in sync
             # and all the workers will take the same decision.
             self.expire_codes_(x)
@@ -236,8 +242,9 @@ class VectorQuantization(nn.Module):
     Currently supports only euclidean distance.
     Args:
         dim (int): Dimension
-        codebook_size (int): Codebook size
+        codebook_size (int): Codebook size, the number of vectors in the codebook
         codebook_dim (int): Codebook dimension. If not defined, uses the specified dimension in dim.
+                            the dimension of each vector in the codebook
         decay (float): Decay for exponential moving average over the codebooks.
         epsilon (float): Epsilon value for numerical stability.
         kmeans_init (bool): Whether to use kmeans to initialize the codebooks.
@@ -293,7 +300,7 @@ class VectorQuantization(nn.Module):
 
     def forward(self, x):
         device = x.device
-        x = rearrange(x, "b d n -> b n d")
+        x = rearrange(x, "b d n -> b n d") # [2,128,32] -> [2,32,128]
         x = self.project_in(x)
 
         quantize, embed_ind = self._codebook(x)
@@ -328,7 +335,7 @@ class ResidualVectorQuantization(nn.Module):
 
     def forward(self, x, n_q: tp.Optional[int] = None):
         quantized_out = 0.0
-        residual = x
+        residual = x # x is encoder output emb
 
         all_losses = []
         all_indices = []
@@ -337,8 +344,8 @@ class ResidualVectorQuantization(nn.Module):
 
         for layer in self.layers[:n_q]:
             quantized, indices, loss = layer(residual)
-            residual = residual - quantized
-            quantized_out = quantized_out + quantized
+            residual = residual - quantized.detach()
+            quantized_out = quantized_out + quantized # y^hat
 
             all_indices.append(indices)
             all_losses.append(loss)

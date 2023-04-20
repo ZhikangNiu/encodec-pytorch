@@ -182,6 +182,8 @@ def test():
     print(len(fmap_gen))
     print(len(fmap_gen[0]))
     print(len(y_disc_gen))
+    print(disc)
+    # norm2d = NormConv2d()
 
 if __name__ == '__main__':
     test()

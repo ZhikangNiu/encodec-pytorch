@@ -5,11 +5,10 @@ import customAudioDataset as data
 from customAudioDataset import collate_fn
 from utils import set_seed
 from tqdm import tqdm
-import torch.nn as nn
 from model import EncodecModel 
 from msstftd import MultiScaleSTFTDiscriminator
 from losses import total_loss, disc_loss
-from torch.optim.lr_scheduler import StepLR,CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from scheduler import WarmUpLR
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -37,9 +36,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         disc_scheduler (_type_): adjust discriminator model learning rate
         warmup_scheduler (_type_): warmup learning rate
     """
-    loss_enc = 0
-    loss_disc = 0
-    loss = 0
     for input_wav in tqdm(trainloader):
         # warmup learning rate, warmup_epoch is defined in config file,default is 5
         if epoch <= config.lr_scheduler.warmup_epoch:
@@ -49,17 +45,17 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         optimizer.zero_grad()
         optimizer_disc.zero_grad()
 
-        output, loss_enc, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_enc: [1] 
+        output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
         logits_real, fmap_real = disc_model(input_wav)
         # train discriminator when epoch > warmup_epoch and train_discriminator is True
         if config.model.train_discriminator and epoch > config.lr_scheduler.warmup_epoch:
-            logits_fake, _ = disc_model(model(input_wav)[0].detach()) # detach to avoid backpropagation to model
+            logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
             loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
             loss_disc.backward(retain_graph=True) 
             optimizer_disc.step()
   
         logits_fake, fmap_fake = disc_model(output)
-        loss = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) + loss_enc
+        loss = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) + loss_w
         loss.backward()
         optimizer.step()
     
@@ -69,11 +65,12 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         disc_scheduler.step()
 
     if not config.distributed.data_parallel or dist.get_rank()==0:
-        logger.info(f'| epoch: {epoch} | loss: {loss.item()} | loss_enc: {loss_enc.item()} | lr: {optimizer.param_groups[0]["lr"]} | disc_lr: {optimizer_disc.param_groups[0]["lr"]}')
+        logger.info(f'| epoch: {epoch} | loss: {loss.item()} | loss_w: {loss_w.item()} | lr: {optimizer.param_groups[0]["lr"]} | disc_lr: {optimizer_disc.param_groups[0]["lr"]}')
         if config.model.train_discriminator and epoch > config.lr_scheduler.warmup_epoch:
             logger.info(f'| loss_disc: {loss_disc.item()}')
 
 def train(local_rank,world_size,config):
+    """train main function."""
     # set logger
     file_handler = logging.FileHandler(f"train_encodec_bs{config.datasets.batch_size}_lr{config.optimization.lr}.log")
     formatter = logging.Formatter('%(asctime)s: %(levelname)s: [%(filename)s: %(lineno)d]: %(message)s')
@@ -102,11 +99,14 @@ def train(local_rank,world_size,config):
                 causal=False, model_norm='time_group_norm', 
                 audio_normalize=config.model.audio_normalize,
                 segment=1., name='my_encodec')
-    disc_model = MultiScaleSTFTDiscriminator(filters=32)
+    disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters)
+    model.cuda()
+    disc_model.cuda()
 
     # resume training
     resume_epoch = 1
     if config.checkpoint.resume:
+        # check the checkpoint_path
         assert config.checkpoint.checkpoint_path != '', "resume path is empty"
         assert config.checkpoint.disc_checkpoint_path != '', "disc resume path is empty"
 
@@ -126,12 +126,12 @@ def train(local_rank,world_size,config):
         logger.info(f"model train mode :{model.training} | quantizer train mode :{model.quantizer.training} ")
 
     if config.distributed.data_parallel:
-        # set distributed init
+        # distributed init
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12355'
 
         torch.distributed.init_process_group(
-            backend='nccl',
+            backend=config.distributed.distributed_backend,
             rank=local_rank,
             world_size=world_size)
         
@@ -147,16 +147,14 @@ def train(local_rank,world_size,config):
             collate_fn=collate_fn,
             pin_memory=config.datasets.pin_memory,
             num_workers=config.datasets.num_workers)
-
-        model.cuda()
+        
+        # wrap the model by using DDP
         model = torch.nn.parallel.DistributedDataParallel(
             model,
             device_ids=[local_rank],
             output_device=local_rank,
             broadcast_buffers=False,
             find_unused_parameters=config.distributed.find_unused_parameters)
-
-        disc_model.cuda()
         disc_model = torch.nn.parallel.DistributedDataParallel(
             disc_model,
             device_ids=[local_rank],
@@ -170,8 +168,7 @@ def train(local_rank,world_size,config):
             batch_size=config.datasets.batch_size, 
             shuffle=True, collate_fn=collate_fn,
             pin_memory=config.datasets.pin_memory)
-        model.cuda()
-        disc_model.cuda()
+
 
     # set optimizer and scheduler, warmup scheduler
     params = [p for p in model.parameters() if p.requires_grad]
@@ -217,7 +214,7 @@ def train(local_rank,world_size,config):
 
 @hydra.main(config_path='config', config_name='config')
 def main(config):
-    if config.distributed.torch_distributed_debug: # set distributed debug
+    if config.distributed.torch_distributed_debug: # set distributed debug, if you encouter some multi gpu bug, please set torch_distributed_debug=True
         os.environ["TORCH_CPP_LOG_LEVEL"]="INFO"
         os.environ["TORCH_DISTRIBUTED_DEBUG"]="DETAIL"
     if not os.path.exists(config.checkpoint.save_folder):

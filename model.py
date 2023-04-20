@@ -196,14 +196,14 @@ class EncodecModel(nn.Module):
         frames = self.encode(x) # input_wav -> encoder , x.shape = [BatchSize,channel,tensor_cut or original length] 2,1,10000
         if self.training:
             # if encodec is training, input_wav -> encoder -> quantizer forward -> decode
-            loss_enc = torch.tensor([0.0], device=x.device, requires_grad=True)
+            loss_w = torch.tensor([0.0], device=x.device, requires_grad=True)
             codes = []
             self.quantizer.train(self.training)
             for emb,scale in frames:
                 qv = self.quantizer.forward(emb,self.frame_rate,self.bandwidth)
-                loss_enc = loss_enc + qv.penalty # loss_enc is the sum of all quantizer forward loss (RVQ commitment loss :l_w)
+                loss_w = loss_w + qv.penalty # loss_w is the sum of all quantizer forward loss (RVQ commitment loss :l_w)
                 codes.append((qv.quantized,scale))
-            return self.decode(codes)[:,:,:x.shape[-1]],loss_enc,frames
+            return self.decode(codes)[:,:,:x.shape[-1]],loss_w,frames
         else:
             # if encodec is not training, input_wav -> encoder -> quantizer encode -> decode
             return self.decode(frames)[:, :, :x.shape[-1]]
@@ -246,7 +246,7 @@ class EncodecModel(nn.Module):
                    name: str = 'unset'):
         encoder = m.SEANetEncoder(channels=channels, norm=model_norm, causal=causal)
         decoder = m.SEANetDecoder(channels=channels, norm=model_norm, causal=causal)
-        n_q = int(1000 * target_bandwidths[-1] // (math.ceil(sample_rate / encoder.hop_length) * 10))
+        n_q = int(1000 * target_bandwidths[-1] // (math.ceil(sample_rate / encoder.hop_length) * 10)) # int(1000*24//(math.ceil(24000/320)*10))
         quantizer = qt.ResidualVectorQuantizer(
             dimension=encoder.dimension,
             n_q=n_q,

@@ -50,9 +50,9 @@ Note:
     python train_multi_gpu.py distributed.data_parallel=False
                         common.log_interval=5 \
                         common.max_epoch=100 \
-                        datasets.tensor_cut=100000 \
-                        datasets.batch_size=8 \
-                        datasets.train_csv_path=./datasets/librispeech_train100h.csv \
+                        datasets.tensor_cut=1000 \
+                        datasets.batch_size=2 \
+                        datasets.train_csv_path=YOUR_PATH/train_encodec/datasets/librispeech_train100h.csv \
                         lr_scheduler.warmup_epoch=20 \
                         optimization.lr=5e-5 \
                         optimization.disc_lr=5e-5 \

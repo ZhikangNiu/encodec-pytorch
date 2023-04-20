@@ -2,6 +2,7 @@ common:
   log_interval: 10
   max_epoch: 10000
   seed: 3401
+  fp16: False
 
 datasets:
   train_csv_path: '/mnt/lustre/sjtu/home/zkn02/EnCodec_Trainer/librispeech_train100h.csv'
@@ -12,6 +13,9 @@ datasets:
   pin_memory: True
 
 checkpoint:
+  resume: False
+  checkpoint_path: ''
+  disc_checkpoint_path: ''
   save_folder: './checkpoints/'
   save_location: '${checkpoint.save_folder}batch${datasets.batch_size}_cut${datasets.tensor_cut}_length${datasets.fixed_length}_' 
 
@@ -27,8 +31,11 @@ model:
   sample_rate: 24_000
   channels: 1
   train_discriminator: True
+  audio_normalize: True
+  filters: 32
 
 distributed:
+  distributed_backend: 'nccl'
   data_parallel: True
   world_size: 4
   find_unused_parameters: False

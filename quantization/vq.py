@@ -27,6 +27,21 @@ class QuantizedResult:
 
 class ResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer.
+        if you want to know more information about RVQ, you can read the soundstream paper (https://arxiv.org/abs/2107.03312)
+        Residual vector quantizer cascades N_q layers of VQ. 
+        the algorithm is described as follows:
+        **********************************************************************************
+        Input: y = enc(x) the output of the encoder, vector quantizers Q_i for i = 1...N_q
+        Output: the quantized y^hat
+        
+        y^hat <- 0 
+        residual <- y
+        for i=1 to N_q do
+            y^hat += Q_i(residual)
+            residual -= Q_i(residual)
+        return y^hat
+
+        **********************************************************************************
     Args:
         dimension (int): Dimension of the codebooks.
         n_q (int): Number of residual vector quantizers used.
@@ -103,11 +118,11 @@ class ResidualVectorQuantizer(nn.Module):
         and returns indices for each quantizer.
         """
         n_q = self.get_num_quantizers_for_bandwidth(sample_rate, bandwidth)
-        codes = self.vq.encode(x, n_q=n_q)
+        codes = self.vq.encode(x, n_q=n_q) # vq.encode output -> out_indices
         return codes
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation.
         """
-        quantized = self.vq.decode(codes)
+        quantized = self.vq.decode(codes) # vq.decode output -> quantized_out
         return quantized
