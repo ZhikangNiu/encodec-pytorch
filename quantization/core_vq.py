@@ -154,7 +154,7 @@ class EuclideanCodebook(nn.Module):
         self.cluster_size.data.copy_(cluster_size)
         self.inited.data.copy_(torch.Tensor([True]))
         # Make sure all buffers across workers are in sync after initialization
-        distrib.broadcast_tensors(self.buffers()) # FIXME: this is not working for some reason
+        # distrib.broadcast_tensors(self.buffers()) # FIXME: this is not working for some reason
 
     def replace_(self, samples, mask):
         modified_codebook = torch.where(
@@ -172,7 +172,7 @@ class EuclideanCodebook(nn.Module):
 
         batch_samples = rearrange(batch_samples, "... d -> (...) d")
         self.replace_(batch_samples, mask=expired_codes)
-        distrib.broadcast_tensors(self.buffers()) # FIXME: this is not working for some reason
+        # distrib.broadcast_tensors(self.buffers()) # FIXME: this is not working for some reason
 
     def preprocess(self, x):
         x = rearrange(x, "... d -> (...) d")

@@ -21,7 +21,6 @@ class CustomAudioDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         waveform, sample_rate = torchaudio.load(self.audio_labels.iloc[idx, :].values[0])
-        waveform = convert_audio(waveform, sample_rate, self.sample_rate, self.channels) # convert audio to model.sample_rate, model.channel
         if self.transform:
             waveform = self.transform(waveform)
 
@@ -29,9 +28,9 @@ class CustomAudioDataset(torch.utils.data.Dataset):
             if waveform.size()[1] > self.tensor_cut:
                 start = random.randint(0, waveform.size()[1]-self.tensor_cut-1) # random start point
                 waveform = waveform[:, start:start+self.tensor_cut] # cut tensor
-                return waveform, self.sample_rate
+                return waveform, sample_rate
             else:
-                return waveform, self.sample_rate
+                return waveform, sample_rate
         
 
 def pad_sequence(batch):

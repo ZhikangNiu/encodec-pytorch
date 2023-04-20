@@ -87,6 +87,13 @@ def train(local_rank,world_size,config):
     # set seed
     if config.common.seed is not None:
         set_seed(config.common.seed)
+    
+        # log model, disc model parameters and train mode
+    
+    logger.info(config)
+    logger.info(f"Encodec Model Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    logger.info(f"Disc Model Parameters: {sum(p.numel() for p in disc_model.parameters() if p.requires_grad)}")
+    logger.info(f"model train mode :{model.module.training} | quantizer train mode :{model.module.quantizer.training} ")
 
     # set train dataset
     trainset = data.CustomAudioDataset(config=config)
@@ -100,8 +107,6 @@ def train(local_rank,world_size,config):
                 audio_normalize=config.model.audio_normalize,
                 segment=1., name='my_encodec')
     disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters)
-    model.cuda()
-    disc_model.cuda()
 
     # resume training
     resume_epoch = 1
@@ -118,20 +123,13 @@ def train(local_rank,world_size,config):
         if resume_epoch > config.common.max_epoch:
             raise ValueError(f"resume epoch {resume_epoch} is larger than total epochs {config.common.epochs}")
 
-    # log model, disc model parameters and train mode
-    if not config.distributed.data_parallel or dist.get_rank()==0:
-        logger.info(config)
-        logger.info(f"Encodec Model Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-        logger.info(f"Disc Model Parameters: {sum(p.numel() for p in disc_model.parameters() if p.requires_grad)}")
-        logger.info(f"model train mode :{model.training} | quantizer train mode :{model.quantizer.training} ")
-
     if config.distributed.data_parallel:
         # distributed init
         os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
+        os.environ['MASTER_PORT'] = '12455'
 
         torch.distributed.init_process_group(
-            backend=config.distributed.distributed_backend,
+            backend='nccl',
             rank=local_rank,
             world_size=world_size)
         
@@ -149,12 +147,14 @@ def train(local_rank,world_size,config):
             num_workers=config.datasets.num_workers)
         
         # wrap the model by using DDP
+        model.cuda()
         model = torch.nn.parallel.DistributedDataParallel(
             model,
             device_ids=[local_rank],
             output_device=local_rank,
             broadcast_buffers=False,
             find_unused_parameters=config.distributed.find_unused_parameters)
+        disc_model.cuda()
         disc_model = torch.nn.parallel.DistributedDataParallel(
             disc_model,
             device_ids=[local_rank],
@@ -168,7 +168,6 @@ def train(local_rank,world_size,config):
             batch_size=config.datasets.batch_size, 
             shuffle=True, collate_fn=collate_fn,
             pin_memory=config.datasets.pin_memory)
-
 
     # set optimizer and scheduler, warmup scheduler
     params = [p for p in model.parameters() if p.requires_grad]
