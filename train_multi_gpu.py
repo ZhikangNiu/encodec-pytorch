@@ -88,13 +88,7 @@ def train(local_rank,world_size,config):
     if config.common.seed is not None:
         set_seed(config.common.seed)
     
-        # log model, disc model parameters and train mode
-    
-    logger.info(config)
-    logger.info(f"Encodec Model Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
-    logger.info(f"Disc Model Parameters: {sum(p.numel() for p in disc_model.parameters() if p.requires_grad)}")
-    logger.info(f"model train mode :{model.module.training} | quantizer train mode :{model.module.quantizer.training} ")
-
+        
     # set train dataset
     trainset = data.CustomAudioDataset(config=config)
     
@@ -107,6 +101,12 @@ def train(local_rank,world_size,config):
                 audio_normalize=config.model.audio_normalize,
                 segment=1., name='my_encodec')
     disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters)
+
+    # log model, disc model parameters and train mode
+    logger.info(config)
+    logger.info(f"Encodec Model Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    logger.info(f"Disc Model Parameters: {sum(p.numel() for p in disc_model.parameters() if p.requires_grad)}")
+    logger.info(f"model train mode :{model.module.training} | quantizer train mode :{model.module.quantizer.training} ")
 
     # resume training
     resume_epoch = 1
