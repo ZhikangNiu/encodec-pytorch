@@ -106,7 +106,7 @@ def train(local_rank,world_size,config):
     logger.info(config)
     logger.info(f"Encodec Model Parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
     logger.info(f"Disc Model Parameters: {sum(p.numel() for p in disc_model.parameters() if p.requires_grad)}")
-    logger.info(f"model train mode :{model.module.training} | quantizer train mode :{model.module.quantizer.training} ")
+    logger.info(f"model train mode :{model.training} | quantizer train mode :{model.quantizer.training} ")
 
     # resume training
     resume_epoch = 1
