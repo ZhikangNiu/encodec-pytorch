@@ -7,9 +7,10 @@
 # Built Visual Studio Code Extensions
 *.vsix
 
-modules/__pycache__/*.pyc
+modules/__pycache__/*
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__/*
+quantization/__pycache__/*
 *.py[cod]
 *$py.class
 
