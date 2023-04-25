@@ -6,8 +6,12 @@ import random
 from utils import convert_audio
 
 class CustomAudioDataset(torch.utils.data.Dataset):
-    def __init__(self, config, transform=None):
-        self.audio_labels = pd.read_csv(config.datasets.train_csv_path)
+    def __init__(self, config, transform=None,mode='train'):
+        assert mode in ['train', 'test'], 'dataset mode must be train or test'
+        if mode == 'train':
+            self.audio_files = pd.read_csv(config.datasets.train_csv_path)
+        elif mode == 'test':
+            self.audio_files = pd.read_csv(config.datasets.test_csv_path)
         self.transform = transform
         self.fixed_length = config.datasets.fixed_length
         self.tensor_cut = config.datasets.tensor_cut
@@ -17,10 +21,10 @@ class CustomAudioDataset(torch.utils.data.Dataset):
     def __len__(self):
         if self.fixed_length:
             return self.fixed_length
-        return len(self.audio_labels)
+        return len(self.audio_files)
 
     def __getitem__(self, idx):
-        waveform, sample_rate = torchaudio.load(self.audio_labels.iloc[idx, :].values[0])
+        waveform, sample_rate = torchaudio.load(self.audio_files.iloc[idx, :].values[0])
         if self.transform:
             waveform = self.transform(waveform)
 

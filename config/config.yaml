@@ -1,11 +1,13 @@
 common:
-  log_interval: 10
-  max_epoch: 10000
+  save_interval: 2
+  test_interval: 5
+  max_epoch: 100
   seed: 3401
   amp: False
 
 datasets:
-  train_csv_path: '/mnt/lustre/sjtu/home/zkn02/EnCodec_Trainer/librispeech_train100h.csv'
+  train_csv_path: '/mnt/lustre/sjtu/home/zkn02/train_encodec/datasets/libritts_train100h.csv'
+  test_csv_path: '/mnt/lustre/sjtu/home/zkn02/train_encodec/datasets/LibriTTS_dev-other.csv'
   batch_size: 2
   tensor_cut: 3200000
   num_workers: 0
@@ -35,7 +37,6 @@ model:
   filters: 32
 
 distributed:
-  distributed_backend: 'nccl'
   data_parallel: True
   world_size: 4
   find_unused_parameters: False

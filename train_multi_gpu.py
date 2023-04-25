@@ -1,4 +1,5 @@
 import os
+import random
 import torch
 import torch.optim as optim
 import customAudioDataset as data
@@ -44,7 +45,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
         optimizer.zero_grad()
         optimizer_disc.zero_grad()
-
         output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
         logits_real, fmap_real = disc_model(input_wav)
         # train discriminator when epoch > warmup_epoch and train_discriminator is True
@@ -55,7 +55,8 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             optimizer_disc.step()
   
         logits_fake, fmap_fake = disc_model(output)
-        loss = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) + loss_w
+        loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
+        loss = loss_g + loss_w
         loss.backward()
         optimizer.step()
     
@@ -65,9 +66,27 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         disc_scheduler.step()
 
     if not config.distributed.data_parallel or dist.get_rank()==0:
-        logger.info(f'| epoch: {epoch} | loss: {loss.item()} | loss_w: {loss_w.item()} | lr: {optimizer.param_groups[0]["lr"]} | disc_lr: {optimizer_disc.param_groups[0]["lr"]}')
+        logger.info(f'| epoch: {epoch} | loss: {loss.item()} | loss_g: {loss_g.item()} | loss_w: {loss_w.item()} | lr: {optimizer.param_groups[0]["lr"]} | disc_lr: {optimizer_disc.param_groups[0]["lr"]}')
         if config.model.train_discriminator and epoch > config.lr_scheduler.warmup_epoch:
             logger.info(f'| loss_disc: {loss_disc.item()}')
+
+@torch.no_grad()
+def test(epoch,model, disc_model, testloader,config):
+    model.eval()
+    for input_wav in tqdm(testloader):
+        input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
+
+        output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
+        logits_real, fmap_real = disc_model(input_wav)
+        logits_fake, fmap_fake = disc_model(output)
+        loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
+        
+        loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
+        loss = loss_g + loss_w
+
+    if not config.distributed.data_parallel or dist.get_rank()==0:
+        logger.info(f'| epoch: {epoch} | loss: {loss.item()} | loss_g: {loss_g.item()} | loss_w: {loss_w.item()} | loss_disc: {loss_disc.item()}')
+
 
 def train(local_rank,world_size,config):
     """train main function."""
@@ -88,10 +107,9 @@ def train(local_rank,world_size,config):
     if config.common.seed is not None:
         set_seed(config.common.seed)
     
-        
     # set train dataset
     trainset = data.CustomAudioDataset(config=config)
-    
+    testset = data.CustomAudioDataset(config=config,mode='test')
     # set encodec model and discriminator model
     model = EncodecModel._get_model(
                 config.model.target_bandwidths, 
@@ -123,51 +141,32 @@ def train(local_rank,world_size,config):
         if resume_epoch > config.common.max_epoch:
             raise ValueError(f"resume epoch {resume_epoch} is larger than total epochs {config.common.epochs}")
 
+    train_sampler = None
+    test_sampler = None
     if config.distributed.data_parallel:
         # distributed init
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12455'
-
-        torch.distributed.init_process_group(
-            backend='nccl',
-            rank=local_rank,
-            world_size=world_size)
-        
+        torch.distributed.init_process_group(backend='nccl',rank=local_rank,world_size=world_size)
         torch.cuda.set_device(local_rank) 
         torch.cuda.empty_cache()
-
         # set distributed sampler
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
-        trainloader = torch.utils.data.DataLoader(
-            trainset, 
-            batch_size=config.datasets.batch_size, 
-            sampler=train_sampler, 
-            collate_fn=collate_fn,
-            pin_memory=config.datasets.pin_memory,
-            num_workers=config.datasets.num_workers)
-        
-        # wrap the model by using DDP
-        model.cuda()
-        model = torch.nn.parallel.DistributedDataParallel(
-            model,
-            device_ids=[local_rank],
-            output_device=local_rank,
-            broadcast_buffers=False,
-            find_unused_parameters=config.distributed.find_unused_parameters)
-        disc_model.cuda()
-        disc_model = torch.nn.parallel.DistributedDataParallel(
-            disc_model,
-            device_ids=[local_rank],
-            output_device=local_rank,
-            broadcast_buffers=False,
-            find_unused_parameters=config.distributed.find_unused_parameters)
-            
-    else:
-        trainloader = torch.utils.data.DataLoader(
-            trainset,
-            batch_size=config.datasets.batch_size, 
-            shuffle=True, collate_fn=collate_fn,
-            pin_memory=config.datasets.pin_memory)
+        test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
+      
+    trainloader = torch.utils.data.DataLoader(
+        trainset,
+        batch_size=config.datasets.batch_size,
+        sampler=train_sampler, 
+        shuffle=(train_sampler is None), collate_fn=collate_fn,
+        pin_memory=config.datasets.pin_memory)
+    testloader = torch.utils.data.DataLoader(
+        testset,
+        batch_size=config.datasets.batch_size,
+        sampler=test_sampler, 
+        shuffle=False, collate_fn=collate_fn,
+        pin_memory=config.datasets.pin_memory)
+
 
     # set optimizer and scheduler, warmup scheduler
     params = [p for p in model.parameters() if p.requires_grad]
@@ -179,6 +178,25 @@ def train(local_rank,world_size,config):
     iter_per_epoch = len(trainloader)
     warmup_scheduler = WarmUpLR(optimizer, iter_per_epoch,config.lr_scheduler.warmup_epoch)
 
+    model.cuda()
+    disc_model.cuda()
+    if config.distributed.data_parallel:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        disc_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(disc_model)
+        # wrap the model by using DDP
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            broadcast_buffers=False,
+            find_unused_parameters=config.distributed.find_unused_parameters)
+        disc_model = torch.nn.parallel.DistributedDataParallel(
+            disc_model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            broadcast_buffers=False,
+            find_unused_parameters=config.distributed.find_unused_parameters)
+
     model.train()
     disc_model.train()
     
@@ -188,6 +206,8 @@ def train(local_rank,world_size,config):
             epoch, optimizer, optimizer_disc, 
             model, disc_model, trainloader,config,
             scheduler,disc_scheduler,warmup_scheduler)
+        if epoch % config.common.test_interval == 0:
+            test(epoch, model, testloader,config)
         # save checkpoint and epoch
         if epoch % config.common.log_interval == 0:
             if config.distributed.data_parallel and dist.get_rank()==0:
