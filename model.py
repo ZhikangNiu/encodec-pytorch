@@ -17,7 +17,7 @@ from torch import nn
 import quantization as qt
 import modules as m
 from utils import _check_checksum, _linear_overlap_add, _get_checkpoint_url
-
+import random
 
 ROOT_URL = 'https://dl.fbaipublicfiles.com/encodec/v0/'
 
@@ -199,8 +199,12 @@ class EncodecModel(nn.Module):
             loss_w = torch.tensor([0.0], device=x.device, requires_grad=True)
             codes = []
             self.quantizer.train(self.training)
+            index = torch.tensor(random.randint(0,len(self.target_bandwidths)-1),device=x.device)
+            if torch.distributed.is_initialized():
+                torch.distributed.broadcast(index, src=0)
+            bw = self.target_bandwidths[index.item()]# fixme: variable bandwidth training, if you broadcast bd, the broadcast will encounter error
             for emb,scale in frames:
-                qv = self.quantizer.forward(emb,self.frame_rate,self.bandwidth)
+                qv = self.quantizer(emb,self.frame_rate,bw)
                 loss_w = loss_w + qv.penalty # loss_w is the sum of all quantizer forward loss (RVQ commitment loss :l_w)
                 codes.append((qv.quantized,scale))
             return self.decode(codes)[:,:,:x.shape[-1]],loss_w,frames
