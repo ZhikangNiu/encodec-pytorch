@@ -2,7 +2,7 @@ common:
   log_interval: 10
   max_epoch: 10000
   seed: 3401
-  fp16: False
+  amp: False
 
 datasets:
   train_csv_path: '/mnt/lustre/sjtu/home/zkn02/EnCodec_Trainer/librispeech_train100h.csv'
@@ -27,7 +27,7 @@ lr_scheduler:
   warmup_epoch: 5
 
 model:
-  target_bandwidths: [1.5, 3., 6, 12., 24.]
+  target_bandwidths: [1.5, 3., 6., 12., 24.]
   sample_rate: 24_000
   channels: 1
   train_discriminator: True
