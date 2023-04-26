@@ -23,6 +23,7 @@ In order to you can run the code, you can install the environment by the help of
 ### Training
 #### 1. Prepare dataset
 I use the librispeech as the train datasets and use the `datasets/generate_train_file.py` generate train csv which is used in the training process. You can check the `datasets/generate_train_file.py` and `customAudioDataset.py` to understand how to prepare your own dataset.
+Also you can use `ln -s` to link the dataset to the `datasets` folder.
 
 #### 2. Train
 You can use the following command to train the model using multi gpu:
@@ -31,7 +32,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train_multi_gpu.py \
                         distributed.torch_distributed_debug=False \
                         distributed.find_unused_parameters=True \
                         distributed.world_size=4 \
-                        common.log_interval=5 \
+                        common.save_interval=5 \
                         common.max_epoch=100 \
                         datasets.tensor_cut=100000 \
                         datasets.batch_size=8 \
@@ -48,7 +49,7 @@ Note:
 5. the single gpu training method is similar to the multi-gpu training method, you only need to set the `distributed.data_parallel=False` parameter to the command, like this:
     ```bash
     python train_multi_gpu.py distributed.data_parallel=False
-                        common.log_interval=5 \
+                        common.save_interval=5 \
                         common.max_epoch=100 \
                         datasets.tensor_cut=1000 \
                         datasets.batch_size=2 \
