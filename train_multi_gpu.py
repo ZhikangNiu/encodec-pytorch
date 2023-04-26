@@ -37,6 +37,8 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         disc_scheduler (_type_): adjust discriminator model learning rate
         warmup_scheduler (_type_): warmup learning rate
     """
+    model.train()
+    disc_model.train()
     for input_wav in tqdm(trainloader):
         # warmup learning rate, warmup_epoch is defined in config file,default is 5
         if epoch <= config.lr_scheduler.warmup_epoch:
@@ -76,16 +78,15 @@ def test(epoch,model, disc_model, testloader,config):
     for input_wav in tqdm(testloader):
         input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
 
-        output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
+        output = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
         logits_real, fmap_real = disc_model(input_wav)
         logits_fake, fmap_fake = disc_model(output)
         loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
         
         loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
-        loss = loss_g + loss_w
 
     if not config.distributed.data_parallel or dist.get_rank()==0:
-        logger.info(f'| epoch: {epoch} | loss: {loss.item()} | loss_g: {loss_g.item()} | loss_w: {loss_w.item()} | loss_disc: {loss_disc.item()}')
+        logger.info(f'| TEST | epoch: {epoch} | loss_g: {loss_g.item()} | loss_disc: {loss_disc.item()}')
 
 
 def train(local_rank,world_size,config):
@@ -196,9 +197,6 @@ def train(local_rank,world_size,config):
             output_device=local_rank,
             broadcast_buffers=False,
             find_unused_parameters=config.distributed.find_unused_parameters)
-
-    model.train()
-    disc_model.train()
     
     start_epoch = max(1,resume_epoch) # start epoch is 1 if not resume
     for epoch in range(start_epoch, config.common.max_epoch+1):
@@ -207,9 +205,9 @@ def train(local_rank,world_size,config):
             model, disc_model, trainloader,config,
             scheduler,disc_scheduler,warmup_scheduler)
         if epoch % config.common.test_interval == 0:
-            test(epoch, model, testloader,config)
+            test(epoch,model,disc_model,testloader,config)
         # save checkpoint and epoch
-        if epoch % config.common.log_interval == 0:
+        if epoch % config.common.save_interval == 0:
             if config.distributed.data_parallel and dist.get_rank()==0:
                 torch.save({
                     'epoch': epoch,
