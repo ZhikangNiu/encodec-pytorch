@@ -174,7 +174,7 @@ modules/__pycache__
 wandb/
 outputs/*
 *.log
-*.wav
+encodec_results/*
 *.ecdc
 *.flac
 encodec_results/*
