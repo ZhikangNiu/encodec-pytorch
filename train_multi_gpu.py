@@ -137,7 +137,7 @@ def train(local_rank,world_size,config):
         model_checkpoint = torch.load(config.checkpoint.checkpoint_path, map_location='cpu')
         disc_model_checkpoint = torch.load(config.checkpoint.disc_checkpoint_path, map_location='cpu')
         model.load_state_dict(model_checkpoint['model_state_dict'])
-        disc_model.load_state_dict(disc_model_checkpoint['disc_model_state_dict'])
+        disc_model.load_state_dict(disc_model_checkpoint['model_state_dict'])
         resume_epoch = model_checkpoint['epoch']
         if resume_epoch > config.common.max_epoch:
             raise ValueError(f"resume epoch {resume_epoch} is larger than total epochs {config.common.epochs}")
