@@ -1,6 +1,10 @@
 # encodec-pytorch
 This is an unofficial implementation of the paper [High Fidelity Neural Audio Compression](https://arxiv.org/pdf/2210.13438.pdf) in PyTorch.
 
+The 24khz encodec checkpoint is release in https://huggingface.co/zkniu/encodec-pytorch/tree/main
+
+I hope we can get together to do something meaningful and rebuild encodec in this repo.
+
 ## Introduction
 This repository is based on [encodec](https://github.com/facebookresearch/encodec) and [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer).
 
