@@ -9,9 +9,9 @@ class CustomAudioDataset(torch.utils.data.Dataset):
     def __init__(self, config, transform=None,mode='train'):
         assert mode in ['train', 'test'], 'dataset mode must be train or test'
         if mode == 'train':
-            self.audio_files = pd.read_csv(config.datasets.train_csv_path)
+            self.audio_files = pd.read_csv(config.datasets.train_csv_path,sep="/n",on_bad_lines='skip')
         elif mode == 'test':
-            self.audio_files = pd.read_csv(config.datasets.test_csv_path)
+            self.audio_files = pd.read_csv(config.datasets.test_csv_path,sep="/n",on_bad_lines='skip',)
         self.transform = transform
         self.fixed_length = config.datasets.fixed_length
         self.tensor_cut = config.datasets.tensor_cut
@@ -25,6 +25,9 @@ class CustomAudioDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         waveform, sample_rate = torchaudio.load(self.audio_files.iloc[idx, :].values[0])
+        """you can preprocess the waveform's sample rate to save time and memory"""
+        if sample_rate != self.sample_rate:
+            waveform = convert_audio(waveform, sample_rate, self.sample_rate, self.channels)
         if self.transform:
             waveform = self.transform(waveform)
 
@@ -32,9 +35,9 @@ class CustomAudioDataset(torch.utils.data.Dataset):
             if waveform.size()[1] > self.tensor_cut:
                 start = random.randint(0, waveform.size()[1]-self.tensor_cut-1) # random start point
                 waveform = waveform[:, start:start+self.tensor_cut] # cut tensor
-                return waveform, sample_rate
+                return waveform, self.sample_rate
             else:
-                return waveform, sample_rate
+                return waveform, self.sample_rate
         
 
 def pad_sequence(batch):
