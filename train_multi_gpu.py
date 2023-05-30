@@ -9,8 +9,7 @@ from tqdm import tqdm
 from model import EncodecModel 
 from msstftd import MultiScaleSTFTDiscriminator
 from losses import total_loss, disc_loss
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from scheduler import WarmUpLR
+from scheduler import WarmupCosineLrScheduler
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import hydra
@@ -22,7 +21,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 # Define train one step function
-def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,warmup_scheduler,):
+def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler):
     """train one step function
 
     Args:
@@ -41,9 +40,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
     disc_model.train()
     for input_wav in tqdm(trainloader):
         # warmup learning rate, warmup_epoch is defined in config file,default is 5
-        if epoch <= config.lr_scheduler.warmup_epoch:
-            warmup_scheduler.step()
-
         input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
         optimizer.zero_grad()
         optimizer_disc.zero_grad()
@@ -61,9 +57,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         loss = loss_g + loss_w
         loss.backward()
         optimizer.step()
-    
-    # Update learning rate using CosineAnnealingLR when epoch > warmup_epoch.
-    if epoch > config.lr_scheduler.warmup_epoch:
+
         scheduler.step()
         disc_scheduler.step()
 
@@ -154,7 +148,10 @@ def train(local_rank,world_size,config):
         # set distributed sampler
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
         test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
-      
+    
+    model.cuda()
+    disc_model.cuda()
+
     trainloader = torch.utils.data.DataLoader(
         trainset,
         batch_size=config.datasets.batch_size,
@@ -174,13 +171,18 @@ def train(local_rank,world_size,config):
     disc_params = [p for p in disc_model.parameters() if p.requires_grad]
     optimizer = optim.Adam([{'params': params, 'lr': config.optimization.lr}], betas=(0.5, 0.9))
     optimizer_disc = optim.Adam([{'params':disc_params, 'lr': config.optimization.disc_lr}], betas=(0.5, 0.9))
-    scheduler = CosineAnnealingLR(optimizer, T_max=100, eta_min=0)
-    disc_scheduler = CosineAnnealingLR(optimizer_disc, T_max=100, eta_min=0)
-    iter_per_epoch = len(trainloader)
-    warmup_scheduler = WarmUpLR(optimizer, iter_per_epoch,config.lr_scheduler.warmup_epoch)
+    scheduler = WarmupCosineLrScheduler(optimizer, max_iter=config.common.max_epoch*len(trainloader), eta_ratio=0.1, warmup_iter=config.lr_scheduler.warmup_epoch*len(trainloader), warmup_ratio=1e-4)
+    disc_scheduler = WarmupCosineLrScheduler(optimizer_disc, max_iter=config.common.max_epoch*len(trainloader), eta_ratio=0.1, warmup_iter=config.lr_scheduler.warmup_epoch*len(trainloader), warmup_ratio=1e-4)
+    # scheduler = CosineAnnealingLR(optimizer, T_max=100, eta_min=0)
+    # disc_scheduler = CosineAnnealingLR(optimizer_disc, T_max=100, eta_min=0)
+    # iter_per_epoch = len(trainloader)
+    # warmup_scheduler = WarmUpLR(optimizer, iter_per_epoch,config.lr_scheduler.warmup_epoch)
+    if config.checkpoint.resume and 'scheduler_state_dict' in model_checkpoint.keys() and 'scheduler_state_dict' in disc_model_checkpoint.keys(): 
+        optimizer.load_state_dict(model_checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(model_checkpoint['scheduler_state_dict'])
+        optimizer_disc.load_state_dict(disc_model_checkpoint['optimizer_state_dict'])
+        disc_scheduler.load_state_dict(disc_model_checkpoint['scheduler_state_dict'])
 
-    model.cuda()
-    disc_model.cuda()
     if config.distributed.data_parallel:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         disc_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(disc_model)
@@ -203,7 +205,7 @@ def train(local_rank,world_size,config):
         train_one_step(
             epoch, optimizer, optimizer_disc, 
             model, disc_model, trainloader,config,
-            scheduler,disc_scheduler,warmup_scheduler)
+            scheduler,disc_scheduler)
         if epoch % config.common.test_interval == 0:
             test(epoch,model,disc_model,testloader,config)
         # save checkpoint and epoch
@@ -212,19 +214,27 @@ def train(local_rank,world_size,config):
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.module.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
                 }, f'{config.checkpoint.save_location}epoch{epoch}_lr{config.optimization.lr}.pt')
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': disc_model.module.state_dict(),
+                    'optimizer_state_dict': optimizer_disc.state_dict(),
+                    'scheduler_state_dict': disc_scheduler.state_dict(),
                 },f'{config.checkpoint.save_location}epoch{epoch}_disc_lr{config.optimization.lr}.pt')
             elif not config.distributed.data_parallel:
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
                 }, f'{config.checkpoint.save_location}epoch{epoch}_lr{config.optimization.lr}.pt')
                 torch.save({
                     'epoch': epoch,
                     'model_state_dict': disc_model.state_dict(),
+                    'optimizer_state_dict': optimizer_disc.state_dict(),
+                    'scheduler_state_dict': disc_scheduler.state_dict(),
                 },f'{config.checkpoint.save_location}epoch{epoch}_disc_lr{config.optimization.lr}.pt')
     if config.distributed.data_parallel:
         dist.destroy_process_group()
