@@ -23,6 +23,7 @@ MODELS = {
     'encodec_24khz': EncodecModel.encodec_model_24khz,
     'encodec_48khz': EncodecModel.encodec_model_48khz,
     'my_encodec':EncodecModel.my_encodec_model,
+    'encodec_bw':EncodecModel.encodec_model_bw,
 }
 
 

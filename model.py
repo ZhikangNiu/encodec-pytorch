@@ -198,7 +198,7 @@ class EncodecModel(nn.Module):
             # if encodec is training, input_wav -> encoder -> quantizer forward -> decode
             loss_w = torch.tensor([0.0], device=x.device, requires_grad=True)
             codes = []
-            self.quantizer.train(self.training)
+            # self.quantizer.train(self.training)
             index = torch.tensor(random.randint(0,len(self.target_bandwidths)-1),device=x.device)
             if torch.distributed.is_initialized():
                 torch.distributed.broadcast(index, src=0)
@@ -341,6 +341,25 @@ class EncodecModel(nn.Module):
         model.load_state_dict({k.replace('quantizer.model','quantizer.vq'):v for k,v in pre_dic.items()})
         model.eval()
         return model
+    
+    @staticmethod
+    def encodec_model_bw(checkpoint: str, bandwidth: float):
+        """Return target bw model, if you train a model in a single bandwidth
+        """
+        import os
+        assert os.path.exists(checkpoint), "checkpoint not exists"
+        print("loading model from: ",checkpoint)
+        target_bandwidths = bandwidth
+        sample_rate = 24_000
+        channels = 1
+        model = EncodecModel._get_model(
+                target_bandwidths, sample_rate, channels,
+                causal=False, model_norm='time_group_norm', audio_normalize=True,
+                segment=1., name='my_encodec')
+        pre_dic = torch.load(checkpoint)['model_state_dict']
+        model.load_state_dict({k.replace('quantizer.model','quantizer.vq'):v for k,v in pre_dic.items()})
+        model.eval()
+        return model
 
 
 def test():
@@ -351,6 +370,7 @@ def test():
         'encodec_24khz': EncodecModel.encodec_model_24khz,
         'encodec_48khz': EncodecModel.encodec_model_48khz,
         "my_encodec": EncodecModel.my_encodec_model,
+        "encodec_bw": EncodecModel.encodec_model_bw,
     }
     for model_name, bw in product(models.keys(), bandwidths):
         model = models[model_name]()

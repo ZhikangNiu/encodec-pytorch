@@ -83,11 +83,7 @@ def check_clipping(wav, args):
             file=sys.stderr)
 
 
-def main():
-    args = get_parser().parse_args()
-    if not args.input.exists():
-        fatal(f"Input file {args.input} does not exist.")
-
+def main(args):
     if args.input.suffix.lower() == SUFFIX:
         # Decompression
         if args.output is None:
@@ -113,6 +109,8 @@ def main():
 
         if model_name == 'my_encodec':
             model = MODELS[model_name](args.checkpoint)
+        elif model_name == 'encodec_bw':
+            model = MODELS[model_name](args.checkpoint,[args.bandwidth])
         else:
             model = MODELS[model_name]()
         
@@ -134,6 +132,25 @@ def main():
             check_clipping(out, args)
             save_audio(out, args.output, out_sample_rate, rescale=args.rescale)
 
+def test():
+    args = get_parser().parse_args()
+    if not args.input.exists():
+        fatal(f"Input file {args.input} does not exist.")
+    
+    if args.input.is_dir():
+        output_root = args.output
+        if not output_root.exists():
+            output_root.mkdir(parents=True)
+        for wav in args.input.glob('**/*.wav'):
+            args.input = wav
+            print(f"Processing {wav}")
+            args.output = output_root.joinpath(wav.stem+f"_bw{args.bandwidth}.wav")
+            main(args)
+    elif args.input.is_file():
+        main(args)
 
 if __name__ == '__main__':
-    main()
+    args = get_parser().parse_args()
+    if not args.input.exists():
+        fatal(f"Input file {args.input} does not exist.")
+    main(args) # if you want to test batch wav in a folder, please use test() instead of main(args)
