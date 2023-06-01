@@ -1,7 +1,7 @@
 # encodec-pytorch
 This is an unofficial implementation of the paper [High Fidelity Neural Audio Compression](https://arxiv.org/pdf/2210.13438.pdf) in PyTorch.
 
-The 24khz encodec checkpoint is release in https://huggingface.co/zkniu/encodec-pytorch/tree/main
+The LibriTTS960h 24khz encodec checkpoint is release in https://huggingface.co/zkniu/encodec-pytorch/tree/main
 
 I hope we can get together to do something meaningful and rebuild encodec in this repo.
 
@@ -15,13 +15,17 @@ Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I hav
 - support warmup scheduler in training.
 - support the test script to test the model.
 
+TODO:
+- [ ] support the 48khz model.
+- [ ] support wandb or tensorboard to monitor the training process.
+
 ## Enviroments
 The code is tested on the following environment:
 - Python 3.9
 - PyTorch 2.0.0 (You can try other versions, but I can't guarantee that it will work. Because torch have changed some api default value (eg: stft). )
 - GeForce RTX 3090 x 4
 
-In order to you can run the code, you can install the environment by the help of requirements.txt. You need to note that this environment contains some irrelevant packages, such as `s3prl`, `fairseq`, `torchvision`, etc. You should check the code and remove the irrelevant packages.
+In order to you can run the code, you can install the environment by the help of requirements.txt.
 
 ## Usage
 ### Training
@@ -63,7 +67,7 @@ Note:
                         optimization.disc_lr=5e-5 \
     ```
 6. the loss is not converged to zero, but the model can be used to compress and decompress the audio. you can use the `compression.sh` to test your model in every log_interval epoch.
-7. the original paper dataset is larger than 17000h, but I only use 100h to train the model, so the model is not good enough. If you want to train a better model, you can use the larger dataset.
+7. the original paper dataset is larger than 17000h, but I only use LibriTTS960h to train the model, so the model is not good enough. If you want to train a better model, you can use the larger dataset.
 8. **The code is not well tested, so there may be some bugs. If you encounter any problems, you can open an issue or contact me by email.**
 ### Test
 I have add a shell script to compress and decompress the audio by different bandwidth, you can use the `compression.sh` to test your model. 
@@ -73,7 +77,7 @@ The script can be used as follows:
 sh compression.sh INPUT_WAV_FILE [MODEL_NAME] [CHECKPOINT]
 ```
 - INPUT_WAV_FILE is the wav file you want to test
-- MODEL_NAME is the model name, default is `encodec_24khz`,support `encodec_48khz`, `my_encodec`
+- MODEL_NAME is the model name, default is `encodec_24khz`,support `encodec_48khz`, `my_encodec`,`encodec_bw`
 - CHECKPOINT is the checkpoint path, when your MODEL_NAME is `my_encodec`,you can point out the checkpoint
 
 if you want to test the model at a specific bandwidth, you can use the following command:
