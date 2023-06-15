@@ -45,22 +45,20 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         optimizer_disc.zero_grad()
         output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
         logits_real, fmap_real = disc_model(input_wav)
-        # train discriminator when epoch > warmup_epoch and train_discriminator is True
-        if config.model.train_discriminator and epoch > config.lr_scheduler.warmup_epoch:
-            logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
-            loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
-            loss_disc.backward(retain_graph=True) 
-            optimizer_disc.step()
-  
         logits_fake, fmap_fake = disc_model(output)
         loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
         loss = loss_g + loss_w
         loss.backward()
         optimizer.step()
-
         scheduler.step()
-        disc_scheduler.step()
-
+        # train discriminator when epoch > warmup_epoch and train_discriminator is True
+        if config.model.train_discriminator and epoch > config.lr_scheduler.warmup_epoch:
+            logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
+            loss_disc = disc_loss([logit_real.detach() for logit_real in logits_real], logits_fake) # compute discriminator loss
+            loss_disc.backward() 
+            optimizer_disc.step()
+            disc_scheduler.step()
+        
     if not config.distributed.data_parallel or dist.get_rank()==0:
         logger.info(f'| epoch: {epoch} | loss: {loss.item()} | loss_g: {loss_g.item()} | loss_w: {loss_w.item()} | lr: {optimizer.param_groups[0]["lr"]} | disc_lr: {optimizer_disc.param_groups[0]["lr"]}')
         if config.model.train_discriminator and epoch > config.lr_scheduler.warmup_epoch:
