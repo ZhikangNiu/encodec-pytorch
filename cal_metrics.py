@@ -6,7 +6,7 @@ from pathlib import Path
 import librosa
 import numpy as np
 from tqdm import tqdm
-
+from audiotools.metrics.quality import visqol
 def get_parser():
     parser = argparse.ArgumentParser(description="Compute STOI and PESQ measure")
     parser.add_argument(
@@ -28,6 +28,14 @@ def get_parser():
         default=24000,
         help="encodec sample rate."
     )
+    parser.add_argument(
+        '-b',
+        '--bandwidth',
+        type=float,
+        default=6.0,
+        help="encodec bandwidth.",
+        choices=[1.5, 3.0, 6.0, 12.0, 24.0, 48.0]
+    )
     return parser
 
 
@@ -48,6 +56,8 @@ def calculate_pesq(ref_wav, deg_wav, sr):
     wb_pesq_score = pesq(sr, ref_wav, deg_wav, 'wb')
     return nb_pesq_score, wb_pesq_score
 
+def calculate_visqol(ref_wav,deg_wav,mode='audio'):
+    pass
 def main():
     args = get_parser().parse_args()
     stoi_scores = []
@@ -55,7 +65,7 @@ def main():
     wb_pesq_scores = []
     for deg_wav_path in tqdm(list(Path(args.deg_dir).rglob('*.wav'))):
         relative_path = deg_wav_path.relative_to(args.deg_dir)
-        ref_wav_path = Path(args.ref_dir) / relative_path.parents[0] /deg_wav_path.name.replace('_bw6.0', '')
+        ref_wav_path = Path(args.ref_dir) / relative_path.parents[0] /deg_wav_path.name.replace(f'_bw{args.bandwidth}', '')
         ref_wav,_ = librosa.load(ref_wav_path, sr=args.sr)
         deg_wav,_ = librosa.load(deg_wav_path, sr=args.sr)
         stoi_score = calculate_stoi(ref_wav, deg_wav, sr=args.sr)
