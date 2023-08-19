@@ -1,0 +1,14 @@
+CODE_ROOT="$PWD"
+python train_multi_gpu.py distributed.data_parallel=False \
+                    common.save_interval=5 \
+                    common.max_epoch=100 \
+                    datasets.tensor_cut=100000 \
+                    datasets.batch_size=4 \
+                    datasets.train_csv_path=${CODE_ROOT}/datasets/libritts960_train_all.csv \
+                    datasets.test_csv_path=${CODE_ROOT}/datasets/libritts_test_all.csv \
+                    datasets.num_workers=4 \
+                    lr_scheduler.warmup_epoch=20 \
+                    optimization.lr=5e-5 \
+                    optimization.disc_lr=5e-5 \
+                    checkpoint.save_folder=/modelblob/users/v-zhikangniu/models/encodec_libritts960 \
+                    hydra.run.dir=/modelblob/users/v-zhikangniu/models/encodec_libritts960
