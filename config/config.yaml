@@ -1,6 +1,7 @@
 common:
   save_interval: 2
   test_interval: 5
+  log_interval: 100
   max_epoch: 100
   seed: 3401
   amp: False
@@ -19,7 +20,7 @@ checkpoint:
   checkpoint_path: ''
   disc_checkpoint_path: ''
   save_folder: './checkpoints/'
-  save_location: '${checkpoint.save_folder}batch${datasets.batch_size}_cut${datasets.tensor_cut}_length${datasets.fixed_length}_' 
+  save_location: '${checkpoint.save_folder}bs${datasets.batch_size}_cut${datasets.tensor_cut}_length${datasets.fixed_length}_' 
 
 optimization:
   lr: 3e-4
@@ -35,12 +36,14 @@ model:
   train_discriminator: True
   audio_normalize: True
   filters: 32
+  ratios: [8, 5, 4, 2]
 
 distributed:
   data_parallel: True
   world_size: 4
   find_unused_parameters: False
   torch_distributed_debug: False
+  init_method: tmp
 
 
 

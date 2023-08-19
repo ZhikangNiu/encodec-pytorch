@@ -247,9 +247,10 @@ class EncodecModel(nn.Module):
                    model_norm: str = 'weight_norm',
                    audio_normalize: bool = False,
                    segment: tp.Optional[float] = None,
-                   name: str = 'unset'):
-        encoder = m.SEANetEncoder(channels=channels, norm=model_norm, causal=causal)
-        decoder = m.SEANetDecoder(channels=channels, norm=model_norm, causal=causal)
+                   name: str = 'unset',
+                   ratios=[8, 5, 4, 2]):
+        encoder = m.SEANetEncoder(channels=channels, norm=model_norm, causal=causal,ratios=ratios)
+        decoder = m.SEANetDecoder(channels=channels, norm=model_norm, causal=causal,ratios=ratios)
         n_q = int(1000 * target_bandwidths[-1] // (math.ceil(sample_rate / encoder.hop_length) * 10)) # int(1000*24//(math.ceil(24000/320)*10))
         quantizer = qt.ResidualVectorQuantizer(
             dimension=encoder.dimension,
