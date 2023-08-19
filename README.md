@@ -10,6 +10,7 @@ This repository is based on [encodec](https://github.com/facebookresearch/encode
 
 Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I have made the following changes:
 - support multi-gpu training.
+- support AMP training
 - support hydra configuration management.
 - align the loss functions and hyperparameters.
 - support warmup scheduler in training.
@@ -22,7 +23,7 @@ TODO:
 ## Enviroments
 The code is tested on the following environment:
 - Python 3.9
-- PyTorch 2.0.0 (You can try other versions, but I can't guarantee that it will work. Because torch have changed some api default value (eg: stft). )
+- PyTorch 2.0.0
 - GeForce RTX 3090 x 4
 
 In order to you can run the code, you can install the environment by the help of requirements.txt.
@@ -40,11 +41,12 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train_multi_gpu.py \
                         distributed.torch_distributed_debug=False \
                         distributed.find_unused_parameters=True \
                         distributed.world_size=4 \
-                        common.save_interval=5 \
+                        common.save_interval=2 \
+                        common.test_interval=2 \
                         common.max_epoch=100 \
                         datasets.tensor_cut=100000 \
                         datasets.batch_size=8 \
-                        datasets.train_csv_path=./datasets/librispeech_train100h.csv \
+                        datasets.train_csv_path=YOUR TRAIN DATA.csv \
                         lr_scheduler.warmup_epoch=20 \
                         optimization.lr=5e-5 \
                         optimization.disc_lr=5e-5 \
@@ -56,19 +58,24 @@ Note:
 4. if you encounter bug about multi-gpu training, you can try to set `distributed.torch_distributed_debug=True` to get more message about this problem.
 5. the single gpu training method is similar to the multi-gpu training method, you only need to set the `distributed.data_parallel=False` parameter to the command, like this:
     ```bash
-    python train_multi_gpu.py distributed.data_parallel=False
-                        common.save_interval=5 \
-                        common.max_epoch=100 \
-                        datasets.tensor_cut=1000 \
-                        datasets.batch_size=2 \
-                        datasets.train_csv_path=YOUR_PATH/train_encodec/datasets/librispeech_train100h.csv \
-                        lr_scheduler.warmup_epoch=20 \
-                        optimization.lr=5e-5 \
-                        optimization.disc_lr=5e-5 \
+        python train_multi_gpu.py distributed.data_parallel=False
+                            common.save_interval=5 \
+                            common.max_epoch=100 \
+                            datasets.tensor_cut=100000 \
+                            datasets.batch_size=4 \
+                            datasets.train_csv_path=YOUR TRAIN DATA.csv \
+                            lr_scheduler.warmup_epoch=20 \
+                            optimization.lr=5e-5 \
+                            optimization.disc_lr=5e-5 \
     ```
 6. the loss is not converged to zero, but the model can be used to compress and decompress the audio. you can use the `compression.sh` to test your model in every log_interval epoch.
 7. the original paper dataset is larger than 17000h, but I only use LibriTTS960h to train the model, so the model is not good enough. If you want to train a better model, you can use the larger dataset.
 8. **The code is not well tested, so there may be some bugs. If you encounter any problems, you can open an issue or contact me by email.**
+9. When I add AMP training, I found the RVQ loss always be `nan`, and I use L2 norm to normalized quantize and x, like the code
+    ```python
+        quantize = F.normalize(quantize)  
+        commit_loss = F.mse_loss(quantize.detach(), x)
+    ```              
 ### Test
 I have add a shell script to compress and decompress the audio by different bandwidth, you can use the `compression.sh` to test your model. 
 
