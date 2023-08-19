@@ -19,9 +19,7 @@ class CustomAudioDataset(torch.utils.data.Dataset):
         self.channels = config.model.channels
 
     def __len__(self):
-        if self.fixed_length:
-            return self.fixed_length
-        return len(self.audio_files)
+        return self.fixed_length if self.fixed_length and len(self.audio_files) > self.fixed_length else len(self.audio_files)  
 
     def __getitem__(self, idx):
         waveform, sample_rate = torchaudio.load(self.audio_files.iloc[idx, :].values[0])

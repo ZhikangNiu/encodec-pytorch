@@ -14,6 +14,7 @@ import random
 
 import torch
 import torchaudio
+import torch.multiprocessing as mp 
 
 
 def _linear_overlap_add(frames: tp.List[torch.Tensor], stride: int):
@@ -112,3 +113,24 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
     np.random.seed(seed)
     random.seed(seed)
+
+def save_master_checkpoint(epoch, model, optimizer, scheduler, ckpt_name):  
+    state_dict = {  
+        'epoch': epoch,  
+        'model_state_dict': model.state_dict(),  
+        'optimizer_state_dict': optimizer.state_dict(),  
+        'scheduler_state_dict': scheduler.state_dict(),  
+    }  
+    torch.save(state_dict, ckpt_name) 
+
+def start_dist_train(train_fn, world_size, config, dist_init_method=None):  
+    torch.multiprocessing.set_start_method('spawn')  
+    mp.spawn(  
+        train_fn,  
+        args=(world_size, config, dist_init_method) if dist_init_method else (world_size, config, ),  
+        nprocs=world_size,  
+        join=True  
+    )  
+
+def count_parameters(model):  
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)  
