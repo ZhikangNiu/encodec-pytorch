@@ -179,3 +179,8 @@ encodec_results/*
 *.flac
 encodec_results/*
 datasets/*.csv
+.amltconfig
+submit_scripts/*
+node_modules/*
+package.json
+package-lock.json
