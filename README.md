@@ -33,7 +33,19 @@ In order to you can run the code, you can install the environment by the help of
 #### 1. Prepare dataset
 I use the librispeech as the train datasets and use the `datasets/generate_train_file.py` generate train csv which is used in the training process. You can check the `datasets/generate_train_file.py` and `customAudioDataset.py` to understand how to prepare your own dataset.
 Also you can use `ln -s` to link the dataset to the `datasets` folder.
-
+#### [Optional] Docker image
+I provide a dockerfile to build a docker image with all the necessary dependencies.
+1. Building the image
+```shell
+docker build -t encodec:v1 .
+```
+2. Using the image
+```shell
+# CPU running
+docker run encodec:v1 <command> # you can add some parameters, such as -tid
+# GPU running
+docker run --gpus=all encodec:v1 <command>
+```
 #### 2. Train
 You can use the following command to train the model using multi gpu:
 ```bash
@@ -71,7 +83,7 @@ Note:
 6. the loss is not converged to zero, but the model can be used to compress and decompress the audio. you can use the `compression.sh` to test your model in every log_interval epoch.
 7. the original paper dataset is larger than 17000h, but I only use LibriTTS960h to train the model, so the model is not good enough. If you want to train a better model, you can use the larger dataset.
 8. **The code is not well tested, so there may be some bugs. If you encounter any problems, you can open an issue or contact me by email.**
-9. When I add AMP training, I found the RVQ loss always be `nan`, and I use L2 norm to normalized quantize and x, like the code
+9. When I add AMP training, I found the RVQ loss always be `nan`, and I use L2 norm to normalized quantize and x, like the code -> actually, it's unstable.
     ```python
         quantize = F.normalize(quantize)  
         commit_loss = F.mse_loss(quantize.detach(), x)
@@ -93,7 +105,7 @@ python main.py -r -b [bandwidth] -f [INPUT_FILE] [OUTPUT_WAV_FILE] -m [MODEL_NAM
 ```
 main.py from the [encodec](https://github.com/facebookresearch/encodec) , you can use the `-h` to check the help information.
 
-#### 4. Acknowledgement
+### Acknowledgement
 Thanks to the following repositories:
 - [encodec](https://github.com/facebookresearch/encodec)
 - [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer)
