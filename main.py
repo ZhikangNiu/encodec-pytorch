@@ -83,7 +83,7 @@ def check_clipping(wav, args):
             file=sys.stderr)
 
 
-def main(args):
+def main(args,model):
     if args.input.suffix.lower() == SUFFIX:
         # Decompression
         if args.output is None:
@@ -102,24 +102,6 @@ def main(args):
             fatal(f"Output extension must be .wav or {SUFFIX}")
         check_output_exists(args)
 
-        if args.hq:
-            model_name = 'encodec_48khz'
-        else:
-            model_name = args.model_name
-
-        if model_name == 'my_encodec':
-            model = MODELS[model_name](args.checkpoint)
-        elif model_name == 'encodec_bw':
-            model = MODELS[model_name](args.checkpoint,[args.bandwidth])
-        else:
-            model = MODELS[model_name]()
-        
-        print(f"-------------USE {model_name} MODEL-------------")
-
-        if args.bandwidth not in model.target_bandwidths:
-            fatal(f"Bandwidth {args.bandwidth} is not supported by the model {model_name}")
-        model.set_target_bandwidth(args.bandwidth)
-
         wav, sr = torchaudio.load(args.input)
         wav = convert_audio(wav, sr, model.sample_rate, model.channels)
         compressed = compress(model, wav, use_lm=args.lm)
@@ -132,10 +114,24 @@ def main(args):
             check_clipping(out, args)
             save_audio(out, args.output, out_sample_rate, rescale=args.rescale)
 
-def test():
-    args = get_parser().parse_args()
-    if not args.input.exists():
-        fatal(f"Input file {args.input} does not exist.")
+def cli_main(args):
+    if args.hq:
+        model_name = 'encodec_48khz'
+    else:
+        model_name = args.model_name
+
+    if model_name == 'my_encodec':
+        model = MODELS[model_name](args.checkpoint)
+    elif model_name == 'encodec_bw':
+        model = MODELS[model_name](args.checkpoint,[args.bandwidth])
+    else:
+        model = MODELS[model_name]()
+    
+    print(f"-------------USE {model_name} MODEL-------------")
+
+    if args.bandwidth not in model.target_bandwidths:
+        fatal(f"Bandwidth {args.bandwidth} is not supported by the model {model_name}")
+    model.set_target_bandwidth(args.bandwidth)
     
     if args.input.is_dir():
         output_root = args.output
@@ -145,12 +141,12 @@ def test():
             args.input = wav
             print(f"Processing {wav}")
             args.output = output_root.joinpath(wav.stem+f"_bw{args.bandwidth}.wav")
-            main(args)
+            main(args,model)
     elif args.input.is_file():
-        main(args)
+        main(args,model)
 
 if __name__ == '__main__':
     args = get_parser().parse_args()
     if not args.input.exists():
         fatal(f"Input file {args.input} does not exist.")
-    main(args) # if you want to test batch wav in a folder, please use test() instead of main(args)
+    cli_main(args)
