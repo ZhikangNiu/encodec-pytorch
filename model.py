@@ -325,7 +325,7 @@ class EncodecModel(nn.Module):
 
     #TODO: 自己实现一个encodec的model
     @staticmethod
-    def my_encodec_model(checkpoint: str):
+    def my_encodec_model(checkpoint: str,ratios=[8,5,4,2]):
         """Return the pretrained 24khz model.
         """
         import os
@@ -337,7 +337,7 @@ class EncodecModel(nn.Module):
         model = EncodecModel._get_model(
                 target_bandwidths, sample_rate, channels,
                 causal=False, model_norm='time_group_norm', audio_normalize=True,
-                segment=1., name='my_encodec')
+                segment=None, name='my_encodec',ratios=ratios)
         pre_dic = torch.load(checkpoint)['model_state_dict']
         model.load_state_dict({k.replace('quantizer.model','quantizer.vq'):v for k,v in pre_dic.items()})
         model.eval()

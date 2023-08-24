@@ -314,8 +314,8 @@ class VectorQuantization(nn.Module):
                           'https://github.com/facebookresearch/encodec/issues/25 . '
                           'The bug wasn\'t fixed here for reproducibility.')
             if self.commitment_weight > 0:
-                x = F.normalize(x)  
-                quantize = F.normalize(quantize)  
+                # x = F.normalize(x)  
+                # quantize = F.normalize(quantize)  
                 commit_loss = F.mse_loss(quantize.detach(), x)
                 loss = loss + commit_loss * self.commitment_weight
 

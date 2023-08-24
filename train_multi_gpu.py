@@ -38,7 +38,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
     model.train()
     disc_model.train()
     data_length=len(trainloader)
-    logger.info(f"There are {data_length} data to train the EnCodec ")
+    
 
     # Initialize variables to accumulate losses  
     accumulated_loss = 0.0  
@@ -123,7 +123,7 @@ def test(epoch,model, disc_model, testloader,config):
 def train(local_rank,world_size,config,tmp_file=None):
     """train main function."""
     # set logger
-    file_handler = logging.FileHandler(f"train_encodec_bs{config.datasets.batch_size}_lr{config.optimization.lr}.log")
+    file_handler = logging.FileHandler(f"{config.checkpoint.save_folder}/train_encodec_bs{config.datasets.batch_size}_lr{config.optimization.lr}.log")
     formatter = logging.Formatter('%(asctime)s: %(levelname)s: [%(filename)s: %(lineno)d]: %(message)s')
     file_handler.setFormatter(formatter)
 
@@ -223,7 +223,8 @@ def train(local_rank,world_size,config,tmp_file=None):
         sampler=test_sampler, 
         shuffle=False, collate_fn=collate_fn,
         pin_memory=config.datasets.pin_memory)
-
+    logger.info(f"There are {len(trainloader)} data to train the EnCodec ")
+    logger.info(f"There are {len(testloader)} data to test the EnCodec")
 
     # set optimizer and scheduler, warmup scheduler
     params = [p for p in model.parameters() if p.requires_grad]
