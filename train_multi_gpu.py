@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Define train one step function
 def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,scaler=None,scaler_disc=None):
@@ -38,8 +38,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
     model.train()
     disc_model.train()
     data_length=len(trainloader)
-    
-
     # Initialize variables to accumulate losses  
     accumulated_loss = 0.0  
     accumulated_loss_g = 0.0  
@@ -48,7 +46,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
 
     for idx,input_wav in enumerate(trainloader):
         # warmup learning rate, warmup_epoch is defined in config file,default is 5
-        input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
+        input_wav = input_wav.contiguous().cuda() #[B, 1, T]: eg. [2, 1, 203760]
         optimizer.zero_grad()
         optimizer_disc.zero_grad()
         if config.common.amp: 
@@ -58,7 +56,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 logits_fake, fmap_fake = disc_model(output)
                 loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
                 loss = loss_g + loss_w
-            scaler.scale(loss).backward()  
+            scaler.scale(loss).backward(retain_graph=True)  
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  
             scaler.step(optimizer)  
             scaler.update()   
@@ -69,7 +67,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             logits_fake, fmap_fake = disc_model(output)
             loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
             loss = loss_g + loss_w
-            loss.backward()
+            loss.backward(retain_graph=True)
             optimizer.step()
         scheduler.step()
         
@@ -89,7 +87,8 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 scaler_disc.update()  
             else:
                 logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
-                loss_disc = disc_loss([logit_real.detach() for logit_real in logits_real], logits_fake) # compute discriminator loss
+                # loss_disc = disc_loss([logit_real.detach() for logit_real in logits_real], logits_fake) # compute discriminator loss
+                loss_disc = disc_loss(logits_real, logits_fake)
                 loss_disc.backward() 
                 optimizer_disc.step()
             disc_scheduler.step()
