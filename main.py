@@ -135,12 +135,16 @@ def cli_main(args):
     
     if args.input.is_dir():
         output_root = args.output
+        input_root = args.input
         if not output_root.exists():
             output_root.mkdir(parents=True)
         for wav in args.input.glob('**/*.wav'):
-            args.input = wav
             print(f"Processing {wav}")
-            args.output = output_root.joinpath(wav.stem+f"_bw{args.bandwidth}.wav")
+            relative_path = wav.relative_to(input_root)
+            args.input = wav
+            output_path = output_root.joinpath(relative_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            args.output = output_path.with_name(output_path.stem + f"_bw{args.bandwidth}.wav")
             main(args,model)
     elif args.input.is_file():
         main(args,model)
