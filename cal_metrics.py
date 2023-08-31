@@ -1,4 +1,5 @@
 # core codes are copy from https://github.com/yangdongchao/AcademiCodec/tree/master/evaluation_metric/calculate_voc_obj_metrics/metrics
+import os
 import argparse
 from pesq import pesq,cypesq
 from pystoi import stoi
@@ -6,7 +7,6 @@ from pathlib import Path
 import librosa
 import numpy as np
 from tqdm import tqdm
-from audiotools.metrics.quality import visqol
 def get_parser():
     parser = argparse.ArgumentParser(description="Compute STOI and PESQ measure")
     parser.add_argument(
@@ -56,8 +56,41 @@ def calculate_pesq(ref_wav, deg_wav, sr):
     wb_pesq_score = pesq(sr, ref_wav, deg_wav, 'wb')
     return nb_pesq_score, wb_pesq_score
 
-def calculate_visqol(ref_wav,deg_wav,mode='audio'):
-    pass
+def calculate_visqol_moslqo_score(ref_wav,deg_wav,mode='audio'):
+    """Perceptual Quality Estimator for speech and audio
+    you need to follow https://github.com/google/visqol to build & install 
+
+    Args:
+        ref_wav (_type_): re
+        deg_wav (_type_): _description_
+        mode (str, optional): _description_. Defaults to 'audio'.
+    """
+    try:
+        from visqol import visqol_lib_py
+        from visqol.pb2 import visqol_config_pb2
+        from visqol.pb2 import similarity_result_pb2
+    except ImportError:
+        print("visqol is not installed, please build and install follow https://github.com/google/visqol")
+        
+    config = visqol_config_pb2.VisqolConfig()
+
+    if mode == "audio":
+        config.audio.sample_rate = 48000
+        config.options.use_speech_scoring = False
+        svr_model_path = "libsvm_nu_svr_model.txt"
+    elif mode == "speech":
+        config.audio.sample_rate = 16000
+        config.options.use_speech_scoring = True
+        svr_model_path = "lattice_tcditugenmeetpackhref_ls2_nl60_lr12_bs2048_learn.005_ep2400_train1_7_raw.tflite"
+    else:
+        raise ValueError(f"Unrecognized mode: {mode}")
+    config.options.svr_model_path = os.path.join(
+        os.path.dirname(visqol_lib_py.__file__), "model", svr_model_path)
+    api = visqol_lib_py.VisqolApi()
+    api.Create(config)
+    similarity_result = api.Measure(ref_wav.astype(float), deg_wav.astype(float))
+    return similarity_result.moslqo
+
 def main():
     args = get_parser().parse_args()
     stoi_scores = []
@@ -65,7 +98,7 @@ def main():
     wb_pesq_scores = []
     for deg_wav_path in tqdm(list(Path(args.deg_dir).rglob('*.wav'))):
         relative_path = deg_wav_path.relative_to(args.deg_dir)
-        ref_wav_path = Path(args.ref_dir) / relative_path.parents[0] /deg_wav_path.name.replace(f'_bw{args.bandwidth}', '')
+        ref_wav_path = Path(args.ref_dir) / relative_path.parents[0] /deg_wav_path.name.replace(f'_bw{int(args.bandwidth)}', '')
         ref_wav,_ = librosa.load(ref_wav_path, sr=args.sr)
         deg_wav,_ = librosa.load(deg_wav_path, sr=args.sr)
         stoi_score = calculate_stoi(ref_wav, deg_wav, sr=args.sr)
@@ -88,5 +121,3 @@ if __name__ == '__main__':
     print(f"STOI: {mean_stoi}")
     print(f"NB PESQ: {mean_nb_pesq}")
     print(f"WB PESQ: {mean_wb_pesq}")
-
-
