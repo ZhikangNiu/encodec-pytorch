@@ -48,7 +48,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         # warmup learning rate, warmup_epoch is defined in config file,default is 5
         input_wav = input_wav.contiguous().cuda() #[B, 1, T]: eg. [2, 1, 203760]
         optimizer.zero_grad()
-        optimizer_disc.zero_grad()
         if config.common.amp: 
             with autocast():
                 output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
@@ -74,7 +73,8 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         accumulated_loss += loss.item()  
         accumulated_loss_g += loss_g.item()  
         accumulated_loss_w += loss_w.item()
-
+        
+        optimizer_disc.zero_grad()
         if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
             if config.common.amp: 
                 with autocast():
