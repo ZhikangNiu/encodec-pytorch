@@ -2,7 +2,8 @@ import torch
 import math
 from bisect import bisect_right
 from torch.optim.lr_scheduler import _LRScheduler
- 
+
+# It will be replaced with huggingface optimization
 class WarmUpLR(_LRScheduler):
     """warmup_training learning rate scheduler
     Args:
@@ -23,7 +24,6 @@ class WarmUpLR(_LRScheduler):
 
 
 class WarmupLrScheduler(_LRScheduler):
-
     def __init__(
             self,
             optimizer,
@@ -63,7 +63,6 @@ class WarmupLrScheduler(_LRScheduler):
 
 
 class WarmupPolyLrScheduler(WarmupLrScheduler):
-
     def __init__(
             self,
             optimizer,
@@ -88,7 +87,6 @@ class WarmupPolyLrScheduler(WarmupLrScheduler):
 
 
 class WarmupExpLrScheduler(WarmupLrScheduler):
-
     def __init__(
             self,
             optimizer,
@@ -111,7 +109,6 @@ class WarmupExpLrScheduler(WarmupLrScheduler):
 
 
 class WarmupCosineLrScheduler(WarmupLrScheduler):
-
     def __init__(
             self,
             optimizer,
@@ -135,7 +132,6 @@ class WarmupCosineLrScheduler(WarmupLrScheduler):
 
 
 class WarmupStepLrScheduler(WarmupLrScheduler):
-
     def __init__(
             self,
             optimizer,
@@ -155,26 +151,3 @@ class WarmupStepLrScheduler(WarmupLrScheduler):
         real_iter = self.last_epoch - self.warmup_iter
         ratio = self.gamma ** bisect_right(self.milestones, real_iter)
         return ratio
-
-
-if __name__ == "__main__":
-    model = torch.nn.Conv2d(3, 16, 3, 1, 1)
-    optim = torch.optim.SGD(model.parameters(), lr=1e-3)
-
-    max_iter = 20000
-    lr_scheduler = WarmupCosineLrScheduler(optim,max_iter=max_iter, warmup_iter=1000, warmup_ratio=1e-3)
-    lrs = []
-    for _ in range(max_iter):
-        lr = lr_scheduler.get_lr()[0]
-        print(lr)
-        lrs.append(lr)
-        lr_scheduler.step()
-    import matplotlib
-    import matplotlib.pyplot as plt
-    import numpy as np
-    lrs = np.array(lrs)
-    n_lrs = len(lrs)
-    plt.plot(np.arange(n_lrs), lrs)
-    plt.grid()
-    plt.show()
-
