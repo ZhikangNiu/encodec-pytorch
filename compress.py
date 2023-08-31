@@ -57,6 +57,7 @@ def compress_to_file(model: EncodecModel, wav: torch.Tensor, fo: tp.IO[bytes],
         'al': wav.shape[-1],             # audio_length
         'nc': frames[0][0].shape[1],     # num_codebooks
         'lm': use_lm,                    # use lm?
+        'fr': frames[0][0].shape[2],
     }
     binary.write_ecdc_header(fo, metadata)
 
@@ -118,7 +119,8 @@ def decompress_from_file(model:EncodecModel,fo: tp.IO[bytes], device='cpu') -> t
     segment_stride = model.segment_stride or audio_length
     for offset in range(0, audio_length, segment_stride):
         this_segment_length = min(audio_length - offset, segment_length)
-        frame_length = int(math.ceil(this_segment_length * model.frame_rate / model.sample_rate))
+        # frame_length = int(math.ceil(this_segment_length * model.frame_rate / model.sample_rate))
+        frame_length = metadata["fr"]
         if model.normalize:
             scale_f, = struct.unpack('!f', binary._read_exactly(fo, struct.calcsize('!f')))
             scale = torch.tensor(scale_f, device=device).view(1)
