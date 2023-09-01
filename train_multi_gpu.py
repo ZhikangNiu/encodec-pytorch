@@ -102,7 +102,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 f"Epoch {epoch} {idx+1}/{data_length}\tAvg Loss: {accumulated_loss / (idx + 1):.4f}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
             ) 
             if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
-                log_msg += f"loss_D: {accumulated_loss_disc / (idx + 1) :.4f}"  
+                log_msg += f"loss_disc: {accumulated_loss_disc / (idx + 1) :.4f}"  
             logger.info(log_msg)  
 
 @torch.no_grad()
@@ -153,7 +153,10 @@ def train(local_rank,world_size,config,tmp_file=None):
                 audio_normalize=config.model.audio_normalize,
                 segment=None, name='my_encodec',
                 ratios=config.model.ratios)
-    disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters)
+    disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters,
+                                             hop_lengths=config.model.disc_hop_lengths,
+                                             win_lengths=config.model.disc_win_lengths,
+                                             n_ffts=config.model.disc_n_ffts)
 
     # log model, disc model parameters and train mode
     logger.info(config)
