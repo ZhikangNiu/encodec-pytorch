@@ -65,6 +65,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train_multi_gpu.py \
 ```
 Note: 
 1. if you set a small `datasets.tensor_cut`, you can set a large `datasets.batch_size` to speed up the training process.
+2. when you are training on your own dataset, I suggest you need to choose a moderate-length audio, because If you train your encodec with 1 senconds tensorcut in a small dataset and the encodec model dosen't perform well.
 2. if you encounter bug about `RuntimeError(f"Mismatch in number of params: ours is {len(params)}, at least one worker has a different one.")`. You can use a small `datasets.tensor_cut` to solve this problem.
 3. if your torch version is lower 1.8, you need to check the default value of `torch.stft(return_complex)` in the `audio_to_mel.py`  
 4. if you encounter bug about multi-gpu training, you can try to set `distributed.torch_distributed_debug=True` to get more message about this problem.
@@ -73,10 +74,10 @@ Note:
         python train_multi_gpu.py distributed.data_parallel=False
                             common.save_interval=5 \
                             common.max_epoch=100 \
-                            datasets.tensor_cut=100000 \
+                            datasets.tensor_cut=72000 \
                             datasets.batch_size=4 \
                             datasets.train_csv_path=YOUR TRAIN DATA.csv \
-                            lr_scheduler.warmup_epoch=20 \
+                            lr_scheduler.warmup_epoch=10 \
                             optimization.lr=5e-5 \
                             optimization.disc_lr=5e-5 \
     ```
@@ -87,7 +88,8 @@ Note:
     ```python
         quantize = F.normalize(quantize)  
         commit_loss = F.mse_loss(quantize.detach(), x)
-    ```              
+    ``` 
+11. I suggest you need to focus on the generator loss, the commit loss it could be not converge, you can check some objective metrics about pesq, stoi.
 ### Test
 I have add a shell script to compress and decompress the audio by different bandwidth, you can use the `compression.sh` to test your model. 
 
