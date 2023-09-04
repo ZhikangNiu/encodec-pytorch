@@ -39,7 +39,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
     disc_model.train()
     data_length=len(trainloader)
     # Initialize variables to accumulate losses  
-    accumulated_loss = 0.0  
     accumulated_loss_g = 0.0  
     accumulated_loss_w = 0.0  
     accumulated_loss_disc = 0.0
@@ -48,7 +47,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
         # warmup learning rate, warmup_epoch is defined in config file,default is 5
         input_wav = input_wav.contiguous().cuda() #[B, 1, T]: eg. [2, 1, 203760]
         optimizer.zero_grad()
-        optimizer_disc.zero_grad()
         if config.common.amp: 
             with autocast():
                 output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
@@ -56,7 +54,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 logits_fake, fmap_fake = disc_model(output)
                 loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
                 loss = loss_g + loss_w
-            scaler.scale(loss).backward(retain_graph=True)  
+            scaler.scale(loss).backward()  
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  
             scaler.step(optimizer)  
             scaler.update()   
@@ -67,40 +65,42 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             logits_fake, fmap_fake = disc_model(output)
             loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
             loss = loss_g + loss_w
-            loss.backward(retain_graph=True)
+            loss.backward()
             optimizer.step()
-        scheduler.step()
         
         # Accumulate losses  
-        accumulated_loss += loss.item()  
         accumulated_loss_g += loss_g.item()  
         accumulated_loss_w += loss_w.item()
-
+        
+        optimizer_disc.zero_grad()
         if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
             if config.common.amp: 
                 with autocast():
+                    logits_real, _ = disc_model(input_wav)
                     logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
-                    loss_disc = disc_loss([logit_real.detach() for logit_real in logits_real], logits_fake) # compute discriminator loss
+                    loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
                 scaler_disc.scale(loss_disc).backward()
                 # torch.nn.utils.clip_grad_norm_(disc_model.parameters(), 1.0)    
                 scaler_disc.step(optimizer_disc)  
                 scaler_disc.update()  
             else:
+                logits_real, _ = disc_model(input_wav)
                 logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
-                # loss_disc = disc_loss([logit_real.detach() for logit_real in logits_real], logits_fake) # compute discriminator loss
                 loss_disc = disc_loss(logits_real, logits_fake)
                 loss_disc.backward() 
                 optimizer_disc.step()
-            disc_scheduler.step()
+            
             # Accumulate discriminator loss  
             accumulated_loss_disc += loss_disc.item()
+        scheduler.step()
+        disc_scheduler.step()
 
         if (not config.distributed.data_parallel or dist.get_rank() == 0) and (idx % config.common.log_interval == 0 or idx == data_length - 1): 
             log_msg = (  
-                f"Epoch {epoch} {idx+1}/{data_length}\tAvg Loss: {accumulated_loss / (idx + 1):.4f}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
+                f"Epoch {epoch} {idx+1}/{data_length}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
             ) 
             if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
-                log_msg += f"loss_D: {accumulated_loss_disc / (idx + 1) :.4f}"  
+                log_msg += f"loss_disc: {accumulated_loss_disc / (idx + 1) :.4f}"  
             logger.info(log_msg)  
 
 @torch.no_grad()
@@ -151,7 +151,10 @@ def train(local_rank,world_size,config,tmp_file=None):
                 audio_normalize=config.model.audio_normalize,
                 segment=None, name='my_encodec',
                 ratios=config.model.ratios)
-    disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters)
+    disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters,
+                                             hop_lengths=config.model.disc_hop_lengths,
+                                             win_lengths=config.model.disc_win_lengths,
+                                             n_ffts=config.model.disc_n_ffts)
 
     # log model, disc model parameters and train mode
     logger.info(config)
@@ -159,7 +162,7 @@ def train(local_rank,world_size,config,tmp_file=None):
     logger.info(f"model train mode :{model.training} | quantizer train mode :{model.quantizer.training} ")
 
     # resume training
-    resume_epoch = 1
+    resume_epoch = 0
     if config.checkpoint.resume:
         # check the checkpoint_path
         assert config.checkpoint.checkpoint_path != '', "resume path is empty"
@@ -170,8 +173,9 @@ def train(local_rank,world_size,config,tmp_file=None):
         model.load_state_dict(model_checkpoint['model_state_dict'])
         disc_model.load_state_dict(disc_model_checkpoint['model_state_dict'])
         resume_epoch = model_checkpoint['epoch']
-        if resume_epoch > config.common.max_epoch:
+        if resume_epoch >= config.common.max_epoch:
             raise ValueError(f"resume epoch {resume_epoch} is larger than total epochs {config.common.epochs}")
+        logger.info(f"load chenckpoint of model and disc_model, resume from {resume_epoch}")
 
     train_sampler = None
     test_sampler = None
@@ -241,6 +245,7 @@ def train(local_rank,world_size,config,tmp_file=None):
         scheduler.load_state_dict(model_checkpoint['scheduler_state_dict'])
         optimizer_disc.load_state_dict(disc_model_checkpoint['optimizer_state_dict'])
         disc_scheduler.load_state_dict(disc_model_checkpoint['scheduler_state_dict'])
+        logger.info(f"load optimizer and disc_optimizer state_dict from {resume_epoch}")
 
     if config.distributed.data_parallel:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -259,7 +264,7 @@ def train(local_rank,world_size,config,tmp_file=None):
             broadcast_buffers=False,
             find_unused_parameters=config.distributed.find_unused_parameters)
     
-    start_epoch = max(1,resume_epoch) # start epoch is 1 if not resume
+    start_epoch = max(1,resume_epoch+1) # start epoch is 1 if not resume
     for epoch in range(start_epoch, config.common.max_epoch+1):
         train_one_step(
             epoch, optimizer, optimizer_disc, 
