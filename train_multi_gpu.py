@@ -39,7 +39,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
     disc_model.train()
     data_length=len(trainloader)
     # Initialize variables to accumulate losses  
-    accumulated_loss = 0.0  
     accumulated_loss_g = 0.0  
     accumulated_loss_w = 0.0  
     accumulated_loss_disc = 0.0
@@ -70,7 +69,6 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             optimizer.step()
         
         # Accumulate losses  
-        accumulated_loss += loss.item()  
         accumulated_loss_g += loss_g.item()  
         accumulated_loss_w += loss_w.item()
         
@@ -99,7 +97,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
 
         if (not config.distributed.data_parallel or dist.get_rank() == 0) and (idx % config.common.log_interval == 0 or idx == data_length - 1): 
             log_msg = (  
-                f"Epoch {epoch} {idx+1}/{data_length}\tAvg Loss: {accumulated_loss / (idx + 1):.4f}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
+                f"Epoch {epoch} {idx+1}/{data_length}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
             ) 
             if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
                 log_msg += f"loss_disc: {accumulated_loss_disc / (idx + 1) :.4f}"  
@@ -164,7 +162,7 @@ def train(local_rank,world_size,config,tmp_file=None):
     logger.info(f"model train mode :{model.training} | quantizer train mode :{model.quantizer.training} ")
 
     # resume training
-    resume_epoch = 1
+    resume_epoch = 0
     if config.checkpoint.resume:
         # check the checkpoint_path
         assert config.checkpoint.checkpoint_path != '', "resume path is empty"
