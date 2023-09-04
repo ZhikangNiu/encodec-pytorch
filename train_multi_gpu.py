@@ -9,8 +9,8 @@ from msstftd import MultiScaleSTFTDiscriminator
 from losses import total_loss, disc_loss
 from scheduler import WarmupCosineLrScheduler
 import torch.distributed as dist
-import torch.multiprocessing as mp
 from torch.cuda.amp import GradScaler, autocast  
+from torch.utils.tensorboard import SummaryWriter
 import hydra
 import logging
 import warnings
@@ -20,7 +20,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Define train one step function
-def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,scaler=None,scaler_disc=None):
+def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,scaler=None,scaler_disc=None,writer=None):
     """train one step function
 
     Args:
@@ -99,12 +99,15 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             log_msg = (  
                 f"Epoch {epoch} {idx+1}/{data_length}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
             ) 
+            writer.add_scalar('Train/Loss_G', accumulated_loss_g / (idx + 1), (epoch-1) * len(trainloader) + idx)  
+            writer.add_scalar('Train/Loss_W', accumulated_loss_w / (idx + 1), (epoch-1) * len(trainloader) + idx) 
             if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
                 log_msg += f"loss_disc: {accumulated_loss_disc / (idx + 1) :.4f}"  
-            logger.info(log_msg)  
+                writer.add_scalar('Train/Loss_Disc', accumulated_loss_disc / (idx + 1), (epoch-1) * len(trainloader) + idx) 
+            logger.info(log_msg) 
 
 @torch.no_grad()
-def test(epoch,model, disc_model, testloader,config):
+def test(epoch,model, disc_model, testloader,config,writer):
     model.eval()
     for idx,input_wav in enumerate(testloader):
         input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
@@ -117,6 +120,8 @@ def test(epoch,model, disc_model, testloader,config):
 
     if not config.distributed.data_parallel or dist.get_rank()==0:
         log_msg = (f'| TEST | epoch: {epoch} | loss_g: {loss_g.item():.4f} | loss_disc: {loss_disc.item():.4f}') 
+        writer.add_scalar('Test/Loss_G', loss_g.item(), epoch)  
+        writer.add_scalar('Test/Loss_Disc',loss_disc.item(), epoch)
         logger.info(log_msg) 
 
 def train(local_rank,world_size,config,tmp_file=None):
@@ -263,15 +268,18 @@ def train(local_rank,world_size,config,tmp_file=None):
             output_device=local_rank,
             broadcast_buffers=False,
             find_unused_parameters=config.distributed.find_unused_parameters)
-    
+    if not config.distributed.data_parallel or dist.get_rank() == 0:  
+        writer = SummaryWriter(log_dir=f'{config.checkpoint.save_folder}/runs')  
+    else:  
+        writer = None  
     start_epoch = max(1,resume_epoch+1) # start epoch is 1 if not resume
     for epoch in range(start_epoch, config.common.max_epoch+1):
         train_one_step(
             epoch, optimizer, optimizer_disc, 
             model, disc_model, trainloader,config,
-            scheduler,disc_scheduler,scaler,scaler_disc)
+            scheduler,disc_scheduler,scaler,scaler_disc,writer)
         if epoch % config.common.test_interval == 0:
-            test(epoch,model,disc_model,testloader,config)
+            test(epoch,model,disc_model,testloader,config,writer)
         # save checkpoint and epoch
         if epoch % config.common.save_interval == 0:
             model_to_save = model.module if config.distributed.data_parallel else model
