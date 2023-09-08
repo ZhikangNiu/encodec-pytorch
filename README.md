@@ -1,7 +1,7 @@
 # encodec-pytorch
 This is an unofficial implementation of the paper [High Fidelity Neural Audio Compression](https://arxiv.org/pdf/2210.13438.pdf) in PyTorch.
 
-The LibriTTS960h 24khz encodec checkpoint is release in https://huggingface.co/zkniu/encodec-pytorch/tree/main
+The LibriTTS960h 24khz encodec checkpoint and disc checkpoint is release in https://huggingface.co/zkniu/encodec-pytorch/tree/main
 
 I hope we can get together to do something meaningful and rebuild encodec in this repo.
 
@@ -15,16 +15,17 @@ Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I hav
 - align the loss functions and hyperparameters.
 - support warmup scheduler in training.
 - support the test script to test the model.
+- support tensorboard to monitor the training process.
 
 TODO:
 - [ ] support the 48khz model.
-- [ ] support wandb or tensorboard to monitor the training process.
+- [ ] fix AMP Loss Nan
 
 ## Enviroments
 The code is tested on the following environment:
 - Python 3.9
-- PyTorch 2.0.0
-- GeForce RTX 3090 x 4
+- PyTorch 2.0.0 / PyTorch 1.13
+- GeForce RTX 3090 x 4 / V100-16G x 8 / A40 x 3
 
 In order to you can run the code, you can install the environment by the help of requirements.txt.
 
@@ -112,4 +113,7 @@ Thanks to the following repositories:
 - [encodec](https://github.com/facebookresearch/encodec)
 - [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer)
 - [melgan-neurips](https://github.com/descriptinc/melgan-neurips): audio_to_mel.py
+
+### LICENSE
+The code is same as [encodec](https://github.com/facebookresearch/encodec) LICENSE.
 
