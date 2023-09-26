@@ -56,6 +56,10 @@ def get_parser():
     parser.add_argument(
         '-c','--checkpoint', type=str, 
         help='if use my_encodec, please input checkpoint')
+    parser.add_argument(
+        "-d","--device",type=str,
+        default="cuda"
+    )
     return parser
 
 
@@ -91,7 +95,7 @@ def main(args,model):
         elif args.output.suffix.lower() != '.wav':
             fatal("Output extension must be .wav")
         check_output_exists(args)
-        out, out_sample_rate = decompress(args.input.read_bytes())
+        out, out_sample_rate = decompress(args.input.read_bytes(),device=args.device())
         check_clipping(out, args)
         save_audio(out, args.output, out_sample_rate, rescale=args.rescale)
     else:
@@ -104,13 +108,14 @@ def main(args,model):
 
         wav, sr = torchaudio.load(args.input)
         wav = convert_audio(wav, sr, model.sample_rate, model.channels)
+        wav = wav.to(args.device)
         compressed = compress(model, wav, use_lm=args.lm)
         if args.output.suffix.lower() == SUFFIX:
             args.output.write_bytes(compressed)
         else:
             # Directly run decompression stage
             assert args.output.suffix.lower() == '.wav'
-            out, out_sample_rate = decompress(model,compressed)
+            out, out_sample_rate = decompress(model,compressed,device=args.device)
             check_clipping(out, args)
             save_audio(out, args.output, out_sample_rate, rescale=args.rescale)
 
@@ -127,6 +132,7 @@ def cli_main(args):
     else:
         model = MODELS[model_name]()
     
+    model = model.to(args.device)
     print(f"-------------USE {model_name} MODEL-------------")
 
     if args.bandwidth not in model.target_bandwidths:
@@ -144,7 +150,7 @@ def cli_main(args):
             args.input = wav
             output_path = output_root.joinpath(relative_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            args.output = output_path.with_name(output_path.stem + f"_bw{args.bandwidth}.wav")
+            args.output = output_path.with_name(output_path.stem + f"_bw{int(args.bandwidth)}.wav")
             main(args,model)
     elif args.input.is_file():
         main(args,model)

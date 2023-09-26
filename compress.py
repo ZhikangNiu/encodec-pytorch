@@ -156,7 +156,10 @@ def decompress_from_file(model:EncodecModel,fo: tp.IO[bytes], device='cpu') -> t
         frames.append((frame, scale))
     with torch.no_grad():
         wav = model.decode(frames)
-    return wav[0, :, :audio_length], model.sample_rate
+    if device == "cuda":
+        return wav[0, :, :audio_length].cpu(), model.sample_rate
+    else:
+        return wav[0, :, :audio_length], model.sample_rate
 
 
 def compress(model: EncodecModel, wav: torch.Tensor, use_lm: bool = False) -> bytes:
@@ -176,7 +179,7 @@ def compress(model: EncodecModel, wav: torch.Tensor, use_lm: bool = False) -> by
     return fo.getvalue()
 
 
-def decompress(model:EncodecModel,compressed: bytes, device='cpu') -> tp.Tuple[torch.Tensor, int]:
+def decompress(model:EncodecModel,compressed: bytes, device='cuda') -> tp.Tuple[torch.Tensor, int]:
     """Decompress from a file-object.
     Returns a tuple `(wav, sample_rate)`.
 
