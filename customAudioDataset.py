@@ -4,7 +4,6 @@ import random
 import librosa
 import pandas as pd
 import torch
-import torchaudio
 
 from utils import convert_audio
 

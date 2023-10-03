@@ -1,7 +1,8 @@
-import torch
 import math
 from bisect import bisect_right
+
 from torch.optim.lr_scheduler import _LRScheduler
+
 
 # It will be replaced with huggingface optimization
 class WarmUpLR(_LRScheduler):

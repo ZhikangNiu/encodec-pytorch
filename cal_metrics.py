@@ -1,14 +1,15 @@
 # core codes are copy from https://github.com/yangdongchao/AcademiCodec/tree/master/evaluation_metric/calculate_voc_obj_metrics/metrics
-import os
 import argparse
-from pesq import pesq,cypesq
-from pystoi import stoi
+import os
 from pathlib import Path
+
 import librosa
 import numpy as np
+from pesq import cypesq, pesq
+from pystoi import stoi
 from tqdm import tqdm
-from scipy.io import wavfile
-import scipy.signal as signal
+
+
 def get_parser():
     parser = argparse.ArgumentParser(description="Compute STOI and PESQ measure")
     parser.add_argument(
@@ -81,8 +82,7 @@ def calculate_visqol_moslqo_score(ref_wav,deg_wav,mode='audio'):
     """
     try:
         from visqol import visqol_lib_py
-        from visqol.pb2 import visqol_config_pb2
-        from visqol.pb2 import similarity_result_pb2
+        from visqol.pb2 import similarity_result_pb2, visqol_config_pb2
     except ImportError:
         print("visqol is not installed, please build and install follow https://github.com/google/visqol")
         

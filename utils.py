@@ -6,18 +6,18 @@
 
 """Various utilities."""
 
+import random
+import typing as tp
 from hashlib import sha256
 from pathlib import Path
-import typing as tp
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import soundfile as sf
-import matplotlib.pyplot as plt  
-import random
-
 import torch
+import torch.multiprocessing as mp
 import torchaudio
-import torch.multiprocessing as mp 
 
 
 def _linear_overlap_add(frames: tp.List[torch.Tensor], stride: int):

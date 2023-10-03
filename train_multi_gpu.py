@@ -1,19 +1,23 @@
+import logging
 import os
+import warnings
+
+import hydra
 import torch
+import torch.distributed as dist
 import torch.optim as optim
+from torch.cuda.amp import GradScaler, autocast
+from torch.utils.tensorboard import SummaryWriter
+
 import customAudioDataset as data
 from customAudioDataset import collate_fn
-from utils import set_seed,save_master_checkpoint,start_dist_train,count_parameters
-from model import EncodecModel 
+from losses import disc_loss, total_loss
+from model import EncodecModel
 from msstftd import MultiScaleSTFTDiscriminator
-from losses import total_loss, disc_loss
 from scheduler import WarmupCosineLrScheduler
-import torch.distributed as dist
-from torch.cuda.amp import GradScaler, autocast  
-from torch.utils.tensorboard import SummaryWriter
-import hydra
-import logging
-import warnings
+from utils import (count_parameters, save_master_checkpoint, set_seed,
+                   start_dist_train)
+
 warnings.filterwarnings("ignore")
 
 logger = logging.getLogger()
@@ -162,6 +166,8 @@ def train(local_rank,world_size,config,tmp_file=None):
                                              n_ffts=config.model.disc_n_ffts)
 
     # log model, disc model parameters and train mode
+    logger.info(model)
+    logger.info(disc_model)
     logger.info(config)
     logger.info(f"Encodec Model Parameters: {count_parameters(model)} | Disc Model Parameters: {count_parameters(disc_model)}")
     logger.info(f"model train mode :{model.training} | quantizer train mode :{model.quantizer.training} ")

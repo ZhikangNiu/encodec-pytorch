@@ -1,8 +1,10 @@
+import argparse
 from pathlib import Path
-from tqdm import tqdm
+
 import torch
 import torchaudio
-import argparse
+from tqdm import tqdm
+
 
 def get_parser():
     parser = argparse.ArgumentParser(description="Convert sample rate of all audio files in source_dir and saves to target_dir")

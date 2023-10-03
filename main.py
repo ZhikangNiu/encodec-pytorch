@@ -7,14 +7,13 @@
 """Command-line for audio compression."""
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import torchaudio
 
-from compress import compress, decompress, MODELS
-from utils import save_audio, convert_audio
-
+from compress import MODELS, compress, decompress
+from utils import convert_audio, save_audio
 
 SUFFIX = '.ecdc'
 
