@@ -7,6 +7,8 @@ from pathlib import Path
 import librosa
 import numpy as np
 from tqdm import tqdm
+from scipy.io import wavfile
+import scipy.signal as signal
 def get_parser():
     parser = argparse.ArgumentParser(description="Compute STOI and PESQ measure")
     parser.add_argument(
@@ -25,16 +27,28 @@ def get_parser():
         '-s',
         '--sr',
         type=int,
-        default=24000,
+        default=16000,
         help="encodec sample rate."
     )
     parser.add_argument(
         '-b',
         '--bandwidth',
         type=float,
-        default=6.0,
+        default=6,
         help="encodec bandwidth.",
-        choices=[1.5, 3.0, 6.0, 12.0, 24.0, 48.0]
+    )
+    parser.add_argument(
+        '-e',
+        "--ext",
+        default="wav",
+        type=str,
+        help="file extension"
+    )
+    parser.add_argument(
+        "-o",
+        "--output_result_path",
+        default="./results/",
+        type=Path
     )
     return parser
 
@@ -96,25 +110,28 @@ def main():
     stoi_scores = []
     nb_pesq_scores = []
     wb_pesq_scores = []
-    for deg_wav_path in tqdm(list(Path(args.deg_dir).rglob('*.wav'))):
-        relative_path = deg_wav_path.relative_to(args.deg_dir)
-        ref_wav_path = Path(args.ref_dir) / relative_path.parents[0] /deg_wav_path.name.replace(f'_bw{int(args.bandwidth)}', '')
-        ref_wav,_ = librosa.load(ref_wav_path, sr=args.sr)
-        deg_wav,_ = librosa.load(deg_wav_path, sr=args.sr)
-        stoi_score = calculate_stoi(ref_wav, deg_wav, sr=args.sr)
-        if args.sr != 16000:
-            ref_wav = librosa.resample(y=ref_wav, orig_sr=args.sr, target_sr=16000)
-            deg_wav = librosa.resample(y=deg_wav, orig_sr=args.sr, target_sr=16000)
-        try:
-            nb_pesq_score, wb_pesq_score = calculate_pesq(ref_wav, deg_wav, 16000)
-            nb_pesq_scores.append(nb_pesq_score)
-            wb_pesq_scores.append(wb_pesq_score)
-        except cypesq.NoUtterancesError:
-            print(ref_wav_path)
-            print(deg_wav_path)
-            nb_pesq_score, wb_pesq_score = 0, 0
-        if stoi_score!=1e-5:
-            stoi_scores.append(stoi_score)
+    if not args.output_result_path.exists():
+        args.output_result_path.mkdir(parents=True)
+    with open(f"{args.output_result_path}/pesq_scores.txt","w") as p, open(f"{args.output_result_path}/stoi_scores.txt","w") as s:
+        for deg_wav_path in tqdm(list(Path(args.deg_dir).rglob(f'*.{args.ext}'))):
+            relative_path = deg_wav_path.relative_to(args.deg_dir)
+            ref_wav_path = Path(args.ref_dir) / relative_path.parents[0] /deg_wav_path.name.replace(f'_bw{args.bandwidth}', '')
+            # ref_wav_path = Path(args.ref_dir) / relative_path.parents[0] /deg_wav_path.name.replace(f'', '')
+            ref_wav,_ = librosa.load(ref_wav_path, sr=args.sr)
+            deg_wav,_ = librosa.load(deg_wav_path, sr=args.sr)
+            stoi_score = calculate_stoi(ref_wav, deg_wav, sr=args.sr)
+            try:
+                nb_pesq_score, wb_pesq_score = calculate_pesq(ref_wav, deg_wav, 16000)
+                nb_pesq_scores.append(nb_pesq_score)
+                wb_pesq_scores.append(wb_pesq_score)
+                p.write(f"{ref_wav_path}\t{deg_wav_path}\t{wb_pesq_score}\n")
+            except cypesq.NoUtterancesError:
+                print(ref_wav_path)
+                print(deg_wav_path)
+                nb_pesq_score, wb_pesq_score = 0, 0
+            if stoi_score!=1e-5:
+                stoi_scores.append(stoi_score)
+                s.write(f"{ref_wav_path}\t{deg_wav_path}\t{stoi_score}\n")
     return np.mean(stoi_scores), np.mean(nb_pesq_scores), np.mean(wb_pesq_scores)
 if __name__ == '__main__':
     mean_stoi, mean_nb_pesq, mean_wb_pesq = main()
