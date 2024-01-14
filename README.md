@@ -10,7 +10,7 @@ This repository is based on [encodec](https://github.com/facebookresearch/encode
 
 Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I have made the following changes:
 - support multi-gpu training.
-- support AMP training
+- support AMP training (you need to reduce learning rate and scale vq epsilon from 1e-5 to 1e-3, the reason you can check [issue 8](https://github.com/ZhikangNiu/encodec-pytorch/issues/8))
 - support hydra configuration management.
 - align the loss functions and hyperparameters.
 - support warmup scheduler in training.
@@ -19,7 +19,6 @@ Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I hav
 
 TODO:
 - [ ] support the 48khz model.
-- [ ] fix AMP Loss Nan
 
 ## Enviroments
 The code is tested on the following environment:
@@ -90,7 +89,8 @@ Note:
         quantize = F.normalize(quantize)  
         commit_loss = F.mse_loss(quantize.detach(), x)
     ``` 
-11. I suggest you need to focus on the generator loss, the commit loss it could be not converge, you can check some objective metrics about pesq, stoi.
+11. When you try to use amp training, you need to reduce learning rate and scale vq epsilon from 1e-5 to 1e-3, the reason you can check [issue 8](https://github.com/ZhikangNiu/encodec-pytorch/issues/8)
+12. I suggest you need to focus on the generator loss, the commit loss it could be not converge, you can check some objective metrics about pesq, stoi.
 ### Test
 I have add a shell script to compress and decompress the audio by different bandwidth, you can use the `compression.sh` to test your model. 
 
