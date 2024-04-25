@@ -1,6 +1,7 @@
 import os
 import argparse
 from pathlib import Path
+import pandas as pd  
 
 def generate_csv(file_dir, csv_path,mode='train'):
     # 生成file_dir下所有文件的路径
@@ -15,13 +16,11 @@ def generate_csv(file_dir, csv_path,mode='train'):
     if not csv_path.parent.exists():
         csv_path.parent.mkdir(parents=True)
         
-    with open(csv_path, 'w') as f:
-        for file in file_list:
-            f.write(file + '\n')
+    data = pd.DataFrame(file_list)
+    data.to_csv(csv_path, index=False, header=False)
 
 def split_train_test_csv(csv_path, threshold=0.8):
     try:
-        import pandas as pd  
         from sklearn.model_selection import train_test_split  
     except ImportError as E:
         print("please pip install pandas slearn")
