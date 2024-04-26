@@ -184,3 +184,4 @@ submit_scripts/*
 node_modules/*
 package.json
 package-lock.json
+tags
