@@ -160,10 +160,14 @@ def train(local_rank,world_size,config,tmp_file=None):
                 audio_normalize=config.model.audio_normalize,
                 segment=None, name='my_encodec',
                 ratios=config.model.ratios)
-    disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters,
-                                             hop_lengths=config.model.disc_hop_lengths,
-                                             win_lengths=config.model.disc_win_lengths,
-                                             n_ffts=config.model.disc_n_ffts)
+    disc_model = MultiScaleSTFTDiscriminator(
+        in_channels=config.model.channels,
+        out_channels=config.model.channels,
+        filters=config.model.filters,
+        hop_lengths=config.model.disc_hop_lengths,
+        win_lengths=config.model.disc_win_lengths,
+        n_ffts=config.model.disc_n_ffts,
+    )
 
     # log model, disc model parameters and train mode
     logger.info(model)

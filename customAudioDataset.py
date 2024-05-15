@@ -4,6 +4,8 @@ import random
 import librosa
 import pandas as pd
 import torch
+import audioread
+import warnings
 
 from utils import convert_audio
 
@@ -29,9 +31,22 @@ class CustomAudioDataset(torch.utils.data.Dataset):
         # """you can preprocess the waveform's sample rate to save time and memory"""
         # if sample_rate != self.sample_rate:
         #     waveform = convert_audio(waveform, sample_rate, self.sample_rate, self.channels)
-        waveform,sample_rate = librosa.load(self.audio_files.iloc[idx, :].values[0],sr=self.sample_rate)
-        waveform = torch.as_tensor(waveform).unsqueeze(0)
- 
+        try:
+            waveform, sample_rate = librosa.load(
+                self.audio_files.iloc[idx, :].values[0], 
+                sr=self.sample_rate,
+                mono=self.channels == 1
+            )
+        except audioread.exceptions.NoBackendError:
+            warnings.warn(f"Not able to load {self.audio_files.iloc[idx, :].values[0]}")
+            return self[random.randrange(len(self))]
+
+        # add channel dimension IF loaded audio was mono
+        waveform = torch.as_tensor(waveform)
+        if len(waveform.shape) == 1:
+            waveform = waveform.unsqueeze(0)
+            waveform = waveform.expand(self.channels, -1)
+
         if self.transform:
             waveform = self.transform(waveform)
 
@@ -42,7 +57,7 @@ class CustomAudioDataset(torch.utils.data.Dataset):
                 return waveform, sample_rate
             else:
                 return waveform, sample_rate
-        
+
 
 def pad_sequence(batch):
     # Make all tensor in a batch the same length by padding with zeros
