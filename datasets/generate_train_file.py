@@ -8,7 +8,7 @@ def generate_csv(file_dir, csv_path,mode='train'):
     file_list = []
     for root, dirs, files in os.walk(file_dir):
         for file in files:
-            if (file.endswith('.flac') or file.endswith('.wav')) and mode in root:
+            if (file.endswith('.flac') or file.endswith('.wav') or file.endswith('.mp3')) and mode in root:
                 file_list.append(os.path.join(root, file))
     print(f"file length:{len(file_list)}")
     # 生成csv文件
