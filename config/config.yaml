@@ -40,6 +40,10 @@ model:
   disc_win_lengths: [1024, 2048, 512]
   disc_hop_lengths: [256, 512, 128]
   disc_n_ffts: [1024, 2048, 512]
+  causal: True
+  norm: 'weight_norm'
+  segment: None
+  name: 'my_encodec'
 
 distributed:
   data_parallel: True

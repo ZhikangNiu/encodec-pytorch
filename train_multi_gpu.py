@@ -153,9 +153,9 @@ def train(local_rank,world_size,config,tmp_file=None):
     testset = data.CustomAudioDataset(config=config,mode='test')
     # set encodec model and discriminator model
     model = EncodecModel._get_model(
-                config.model.target_bandwidths, 
-                config.model.sample_rate, 
-                config.model.channels,
+        config.model.target_bandwidths, 
+        config.model.sample_rate, 
+        config.model.channels,
                 causal=False, model_norm='time_group_norm', 
                 audio_normalize=config.model.audio_normalize,
                 segment=None, name='my_encodec',
