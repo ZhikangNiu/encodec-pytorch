@@ -56,7 +56,14 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
                 logits_real, fmap_real = disc_model(input_wav)
                 logits_fake, fmap_fake = disc_model(output)
-                loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
+                loss_g = total_loss(
+                    fmap_real, 
+                    logits_fake, 
+                    fmap_fake, 
+                    input_wav, 
+                    output, 
+                    sample_rate=config.model.sample_rate,
+                ) 
                 loss = loss_g + loss_w
             scaler.scale(loss).backward()  
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  
@@ -67,7 +74,14 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
             logits_real, fmap_real = disc_model(input_wav)
             logits_fake, fmap_fake = disc_model(output)
-            loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
+            loss_g = total_loss(
+                fmap_real,
+                logits_fake,
+                fmap_fake,
+                input_wav,
+                output,
+                sample_rate=config.model.sample_rate,
+            )
             loss = loss_g + loss_w
             loss.backward()
             optimizer.step()
@@ -156,10 +170,11 @@ def train(local_rank,world_size,config,tmp_file=None):
         config.model.target_bandwidths, 
         config.model.sample_rate, 
         config.model.channels,
-                causal=False, model_norm='time_group_norm', 
-                audio_normalize=config.model.audio_normalize,
-                segment=None, name='my_encodec',
-                ratios=config.model.ratios)
+        causal=config.model.causal, model_norm=config.model.norm, 
+        audio_normalize=config.model.audio_normalize,
+        segment=config.model.segment, name=config.model.name,
+        ratios=config.model.ratios,
+    )
     disc_model = MultiScaleSTFTDiscriminator(
         in_channels=config.model.channels,
         out_channels=config.model.channels,
