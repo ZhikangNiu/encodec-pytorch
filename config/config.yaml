@@ -52,6 +52,11 @@ distributed:
   torch_distributed_debug: False
   init_method: tmp
 
-
+balancer:
+  weights:
+    l_t: 0.1
+    l_f: 1
+    l_g: 3
+    l_feat: 3
 
 

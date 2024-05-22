@@ -4,7 +4,7 @@ import typing as tp
 import torch
 from torch import autograd
 
-from .distrib import average_metrics
+from distrib import average_metrics
 
 
 def averager(beta: float = 1):
@@ -80,7 +80,7 @@ class Balancer:
     def metrics(self):
         return self._metrics
 
-    def backward(self, losses: tp.Dict[str, torch.Tensor], input: torch.Tensor):
+    def backward(self, losses: tp.Dict[str, torch.Tensor], input: torch.Tensor, retain_graph=False):
         norms = {}
         grads = {}
         for name, loss in losses.items():
@@ -115,7 +115,7 @@ class Balancer:
             else:
                 grad = self.weights[name] * grads[name]
             out_grad += grad
-        input.backward(out_grad)
+        input.backward(out_grad, retain_graph=retain_graph)
 
 
 def test():

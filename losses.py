@@ -23,7 +23,11 @@ def total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output_wav, sample_
     relu = torch.nn.ReLU()
     l1Loss = torch.nn.L1Loss(reduction='mean')
     l2Loss = torch.nn.MSELoss(reduction='mean')
-    loss = torch.tensor([0.0], device='cuda', requires_grad=True)
+    # Collect losses as defined in paper for use with balancer
+    # l_t - L1 distance between the target and compressed audio over the time domain
+    # l_f - linear combination between the L1 and L2 losses over the mel-spectrogram using several time scales
+    # l_g - adversarial loss for the generator
+    # l_feat - relative feature matching loss for the generator
     l_t = torch.tensor([0.0], device='cuda', requires_grad=True)
     l_f = torch.tensor([0.0], device='cuda', requires_grad=True)
     l_g = torch.tensor([0.0], device='cuda', requires_grad=True)
@@ -36,7 +40,7 @@ def total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output_wav, sample_
     for i in range(5, 12): #e=5,...,11
         fft = Audio2Mel(n_fft=2 ** i,win_length=2 ** i, hop_length=(2 ** i) // 4, n_mel_channels=64, sampling_rate=sample_rate)
         l_f = l_f + l1Loss(fft(input_wav), fft(output_wav)) + l2Loss(fft(input_wav), fft(output_wav))
-    
+
     #generator loss and feat loss, D_k(\hat x) = logits_fake[k], D_k^l(x) = fmap_real[k][l], D_k^l(\hat x) = fmap_fake[k][l]
     # l_g = \sum max(0, 1 - D_k(\hat x)) / K, K = disc.num_discriminators = len(fmap_real) = len(fmap_fake) = len(logits_fake) = 3
     # l_feat = \sum |D_k^l(x) - D_k^l(\hat x)| / |D_k^l(x)| / KL, KL = len(fmap_real[0])*len(fmap_real)=3 * 5
@@ -45,13 +49,18 @@ def total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output_wav, sample_
         for tt2 in range(len(fmap_real[tt1])): # len(fmap_real[tt1]) = 5
             # l_feat = l_feat + l1Loss(fmap_real[tt1][tt2].detach(), fmap_fake[tt1][tt2]) / torch.mean(torch.abs(fmap_real[tt1][tt2].detach()))
             l_feat = l_feat + l1Loss(fmap_real[tt1][tt2], fmap_fake[tt1][tt2]) / torch.mean(torch.abs(fmap_real[tt1][tt2]))
-    
+
     KL_scale = len(fmap_real)*len(fmap_real[0]) # len(fmap_real) == len(fmap_fake) == len(logits_real) == len(logits_fake) == disc.num_discriminators == K
+    l_feat /= KL_scale
     K_scale = len(fmap_real) # len(fmap_real[0]) = len(fmap_fake[0]) == L
-    
-    loss = 3*l_g/K_scale + 3*l_feat/KL_scale + (l_t / 10) + l_f
-    
-    return loss
+    l_g /= K_scale
+
+    return {
+        'l_t': l_t,
+        'l_f': l_f,
+        'l_g': l_g,
+        'l_feat': l_feat,
+    }
 
 def disc_loss(logits_real, logits_fake):
     """This function is used to compute the loss of the discriminator.
@@ -59,7 +68,7 @@ def disc_loss(logits_real, logits_fake):
     Args:
         logits_real (List[torch.Tensor]): logits_real = disc_model(input_wav)[0]
         logits_fake (List[torch.Tensor]): logits_fake = disc_model(model(input_wav)[0])[0]
-    
+
     Returns:
         lossd: discriminator loss
     """

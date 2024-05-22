@@ -27,4 +27,6 @@ srun --container-name=encodec --container-mounts=/hpi/fs00/share/fg-meinel/datas
         model.norm=time_group_norm \
         model.segment=1. \
         model.name=encodec_48khz_reproduce \
-        model.channels=2
+        model.channels=2 \
+        balancer.weights.l_g=4 \
+        balancer.weights.l_feat=4

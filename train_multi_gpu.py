@@ -1,6 +1,7 @@
 import logging
 import os
 import warnings
+from collections import defaultdict
 
 import hydra
 import torch
@@ -17,6 +18,7 @@ from msstftd import MultiScaleSTFTDiscriminator
 from scheduler import WarmupCosineLrScheduler
 from utils import (count_parameters, save_master_checkpoint, set_seed,
                    start_dist_train)
+from balancer import Balancer
 
 warnings.filterwarnings("ignore")
 
@@ -24,7 +26,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Define train one step function
-def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,scaler=None,scaler_disc=None,writer=None):
+def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,scaler=None,scaler_disc=None,writer=None,balancer=None):
     """train one step function
 
     Args:
@@ -43,8 +45,9 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
     disc_model.train()
     data_length=len(trainloader)
     # Initialize variables to accumulate losses  
-    accumulated_loss_g = 0.0  
-    accumulated_loss_w = 0.0  
+    accumulated_loss_g = 0.0
+    accumulated_losses_g = defaultdict(float)
+    accumulated_loss_w = 0.0
     accumulated_loss_disc = 0.0
 
     for idx,input_wav in enumerate(trainloader):
@@ -55,7 +58,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
             logits_real, fmap_real = disc_model(input_wav)
             logits_fake, fmap_fake = disc_model(output)
-            loss_g = total_loss(
+            losses_g = total_loss(
                 fmap_real, 
                 logits_fake, 
                 fmap_fake, 
@@ -63,8 +66,10 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 output, 
                 sample_rate=config.model.sample_rate,
             ) 
-            loss = loss_g + loss_w
         if config.common.amp: 
+            loss = 3*losses_g['l_g'] + 3*losses_g['l_feat'] + losses_g['l_t']/10 + losses_g['l_f']  + loss_w
+            # not implementing loss balancer in this section, since they say amp is not working anyway:
+            # https://github.com/ZhikangNiu/encodec-pytorch/issues/21#issuecomment-2122593367
             scaler.scale(loss).backward()  
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  
             scaler.step(optimizer)  
@@ -72,11 +77,24 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             # BUG: doesn't this get done later anyway?
             scheduler.step()  
         else:
-            loss.backward()
+            # They say they use multiple backwards calls, and lambda_w is 1...
+            # https://github.com/facebookresearch/encodec/issues/20
+            if balancer is not None:
+                balancer.backward(losses_g, output, retain_graph=True)
+                # naive loss summation for metrics below
+                loss_g = sum([l * balancer.weights[k] for k, l in losses_g.items()])
+            else:
+                # without balancer: loss = 3*l_g + 3*l_feat + (l_t / 10) + l_f
+                # loss_g = torch.tensor([0.0], device='cuda', requires_grad=True)
+                loss_g = 3*losses_g['l_g'] + 3*losses_g['l_feat'] + losses_g['l_t']/10 + losses_g['l_f'] 
+                loss_g.backward()
+            loss_w.backward()
             optimizer.step()
 
         # Accumulate losses  
-        accumulated_loss_g += loss_g.item()  
+        accumulated_loss_g += loss_g.item()
+        for k, l in losses_g.items():
+            accumulated_losses_g[k] += l.item()
         accumulated_loss_w += loss_w.item()
 
         # TODO: only update discriminator with probability from paper (configure)
@@ -105,6 +123,8 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 f"Epoch {epoch} {idx+1}/{data_length}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
             ) 
             writer.add_scalar('Train/Loss_G', accumulated_loss_g / (idx + 1), (epoch-1) * len(trainloader) + idx)  
+            for k, l in accumulated_losses_g.items():
+                writer.add_scalar(f'Train/{k}', l / (idx + 1), (epoch-1) * len(trainloader) + idx)
             writer.add_scalar('Train/Loss_W', accumulated_loss_w / (idx + 1), (epoch-1) * len(trainloader) + idx) 
             if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
                 log_msg += f"loss_disc: {accumulated_loss_disc / (idx + 1) :.4f}"  
@@ -121,11 +141,12 @@ def test(epoch,model, disc_model, testloader,config,writer):
         logits_real, fmap_real = disc_model(input_wav)
         logits_fake, fmap_fake = disc_model(output)
         loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
-        loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
+        losses_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
 
     if not config.distributed.data_parallel or dist.get_rank()==0:
-        log_msg = (f'| TEST | epoch: {epoch} | loss_g: {loss_g.item():.4f} | loss_disc: {loss_disc.item():.4f}') 
-        writer.add_scalar('Test/Loss_G', loss_g.item(), epoch)  
+        log_msg = (f'| TEST | epoch: {epoch} | loss_g: {sum(losses_g.values())} | loss_disc: {loss_disc.item():.4f}') 
+        for k, l in losses_g.items():
+            writer.add_scalar(f'Test/{k}', l.item(), epoch)  
         writer.add_scalar('Test/Loss_Disc',loss_disc.item(), epoch)
         logger.info(log_msg) 
 
@@ -285,11 +306,15 @@ def train(local_rank,world_size,config,tmp_file=None):
     else:  
         writer = None  
     start_epoch = max(1,resume_epoch+1) # start epoch is 1 if not resume
+    # instantiate loss balancer
+    balancer = Balancer(dict(config.balancer.weights)) if hasattr(config, 'balancer') else None
+    if balancer:
+        logger.info(f'Loss balancer with weights {balancer.weights} instantiated')
     for epoch in range(start_epoch, config.common.max_epoch+1):
         train_one_step(
             epoch, optimizer, optimizer_disc, 
             model, disc_model, trainloader,config,
-            scheduler,disc_scheduler,scaler,scaler_disc,writer)
+            scheduler,disc_scheduler,scaler,scaler_disc,writer,balancer)
         if epoch % config.common.test_interval == 0:
             test(epoch,model,disc_model,testloader,config,writer)
         # save checkpoint and epoch
