@@ -144,7 +144,7 @@ def test(epoch,model, disc_model, testloader,config,writer):
         losses_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
 
     if not config.distributed.data_parallel or dist.get_rank()==0:
-        log_msg = (f'| TEST | epoch: {epoch} | loss_g: {sum(losses_g.values())} | loss_disc: {loss_disc.item():.4f}') 
+        log_msg = (f'| TEST | epoch: {epoch} | loss_g: {sum([l.item() for l in losses_g.values()])} | loss_disc: {loss_disc.item():.4f}') 
         for k, l in losses_g.items():
             writer.add_scalar(f'Test/{k}', l.item(), epoch)  
         writer.add_scalar('Test/Loss_Disc',loss_disc.item(), epoch)
