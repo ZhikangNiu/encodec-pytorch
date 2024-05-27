@@ -152,6 +152,9 @@ def test(epoch,model, disc_model, testloader,config,writer):
 
 def train(local_rank,world_size,config,tmp_file=None):
     """train main function."""
+    # remove the logging handler "somebody" added
+    logger.handlers.clear()
+
     # set logger
     file_handler = logging.FileHandler(f"{config.checkpoint.save_folder}/train_encodec_bs{config.datasets.batch_size}_lr{config.optimization.lr}.log")
     formatter = logging.Formatter('%(asctime)s: %(levelname)s: [%(filename)s: %(lineno)d]: %(message)s')
