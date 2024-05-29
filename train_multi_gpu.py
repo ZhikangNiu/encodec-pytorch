@@ -2,6 +2,8 @@ import logging
 import os
 import warnings
 from collections import defaultdict
+import random
+from pathlib import Path
 
 import hydra
 import torch
@@ -9,6 +11,7 @@ import torch.distributed as dist
 import torch.optim as optim
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
+import torchaudio
 
 import customAudioDataset as data
 from customAudioDataset import collate_fn
@@ -132,12 +135,12 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             logger.info(log_msg) 
 
 @torch.no_grad()
-def test(epoch,model, disc_model, testloader,config,writer):
+def test(epoch, model, disc_model, testloader, config, writer):
     model.eval()
-    for idx,input_wav in enumerate(testloader):
-        input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
+    for idx, input_wav in enumerate(testloader):
+        input_wav = input_wav.cuda()
 
-        output = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
+        output = model(input_wav)
         logits_real, fmap_real = disc_model(input_wav)
         logits_fake, fmap_fake = disc_model(output)
         loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
@@ -147,8 +150,17 @@ def test(epoch,model, disc_model, testloader,config,writer):
         log_msg = (f'| TEST | epoch: {epoch} | loss_g: {sum([l.item() for l in losses_g.values()])} | loss_disc: {loss_disc.item():.4f}') 
         for k, l in losses_g.items():
             writer.add_scalar(f'Test/{k}', l.item(), epoch)  
-        writer.add_scalar('Test/Loss_Disc',loss_disc.item(), epoch)
-        logger.info(log_msg) 
+        writer.add_scalar('Test/Loss_Disc', loss_disc.item(), epoch)
+        logger.info(log_msg)
+
+        # save a sample reconstruction (not cropped)
+        input_wav, _ = testloader.dataset.get()
+        input_wav = input_wav.cuda()
+        output = model(input_wav.unsqueeze(0)).squeeze(0)
+        # summarywriter can't log stereo files 😅 so just save examples
+        sp = Path(config.checkpoint.save_folder)
+        torchaudio.save(sp/f'GT.wav', input_wav.cpu(), config.model.sample_rate)
+        torchaudio.save(sp/f'Reconstruction.wav', output.cpu(), config.model.sample_rate)
 
 def train(local_rank,world_size,config,tmp_file=None):
     """train main function."""
@@ -267,7 +279,7 @@ def train(local_rank,world_size,config,tmp_file=None):
         sampler=test_sampler, 
         shuffle=False, collate_fn=collate_fn,
         pin_memory=config.datasets.pin_memory)
-    logger.info(f"There are {len(trainloader)} data to train the EnCodec ")
+    logger.info(f"There are {len(trainloader)} data to train the EnCodec")
     logger.info(f"There are {len(testloader)} data to test the EnCodec")
 
     # set optimizer and scheduler, warmup scheduler
@@ -306,6 +318,7 @@ def train(local_rank,world_size,config,tmp_file=None):
             find_unused_parameters=config.distributed.find_unused_parameters)
     if not config.distributed.data_parallel or dist.get_rank() == 0:  
         writer = SummaryWriter(log_dir=f'{config.checkpoint.save_folder}/runs')  
+        logger.info(f'Saving tensorboard logs to {Path(writer.log_dir).resolve()}')
     else:  
         writer = None  
     start_epoch = max(1,resume_epoch+1) # start epoch is 1 if not resume

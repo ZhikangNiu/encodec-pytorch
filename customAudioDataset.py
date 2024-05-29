@@ -26,11 +26,10 @@ class CustomAudioDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.fixed_length if self.fixed_length and len(self.audio_files) > self.fixed_length else len(self.audio_files)  
 
-    def __getitem__(self, idx):
-        # waveform, sample_rate = torchaudio.load(self.audio_files.iloc[idx, :].values[0])
-        # """you can preprocess the waveform's sample rate to save time and memory"""
-        # if sample_rate != self.sample_rate:
-        #     waveform = convert_audio(waveform, sample_rate, self.sample_rate, self.channels)
+    def get(self, idx=None):
+        """uncropped, untransformed getter with random sample feature"""
+        if idx is None:
+            idx = random.randrange(len(self))
         try:
             waveform, sample_rate = librosa.load(
                 self.audio_files.iloc[idx, :].values[0], 
@@ -46,6 +45,15 @@ class CustomAudioDataset(torch.utils.data.Dataset):
         if len(waveform.shape) == 1:
             waveform = waveform.unsqueeze(0)
             waveform = waveform.expand(self.channels, -1)
+
+        return waveform, sample_rate
+
+    def __getitem__(self, idx):
+        # waveform, sample_rate = torchaudio.load(self.audio_files.iloc[idx, :].values[0])
+        # """you can preprocess the waveform's sample rate to save time and memory"""
+        # if sample_rate != self.sample_rate:
+        #     waveform = convert_audio(waveform, sample_rate, self.sample_rate, self.channels)
+        waveform, sample_rate = self.get(idx)
 
         if self.transform:
             waveform = self.transform(waveform)
