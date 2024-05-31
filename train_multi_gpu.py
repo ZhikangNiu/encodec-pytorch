@@ -329,6 +329,7 @@ def train(local_rank,world_size,config,tmp_file=None):
     balancer = Balancer(dict(config.balancer.weights)) if hasattr(config, 'balancer') else None
     if balancer:
         logger.info(f'Loss balancer with weights {balancer.weights} instantiated')
+    test(0, model, disc_model, testloader, config, writer)
     for epoch in range(start_epoch, config.common.max_epoch+1):
         train_one_step(
             epoch, optimizer, optimizer_disc, 
