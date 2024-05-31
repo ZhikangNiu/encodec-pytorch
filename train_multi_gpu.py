@@ -100,7 +100,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             accumulated_losses_g[k] += l.item()
         accumulated_loss_w += loss_w.item()
 
-        # TODO: only update discriminator with probability from paper (configure)
+        # only update discriminator with probability from paper (configure)
         optimizer_disc.zero_grad()
         train_discriminator = (config.model.train_discriminator 
                                and epoch >= config.lr_scheduler.warmup_epoch 
@@ -132,7 +132,7 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             for k, l in accumulated_losses_g.items():
                 writer.add_scalar(f'Train/{k}', l / (idx + 1), (epoch-1) * len(trainloader) + idx)
             writer.add_scalar('Train/Loss_W', accumulated_loss_w / (idx + 1), (epoch-1) * len(trainloader) + idx) 
-            if train_discriminator:
+            if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
                 log_msg += f"loss_disc: {accumulated_loss_disc / (idx + 1) :.4f}"  
                 writer.add_scalar('Train/Loss_Disc', accumulated_loss_disc / (idx + 1), (epoch-1) * len(trainloader) + idx) 
             logger.info(log_msg) 
