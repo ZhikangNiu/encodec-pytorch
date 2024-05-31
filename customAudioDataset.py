@@ -5,7 +5,9 @@ import librosa
 import pandas as pd
 import torch
 import audioread
-import warnings
+
+import logging
+logger = logging.getLogger(__name__)
 
 from utils import convert_audio
 
@@ -28,17 +30,21 @@ class CustomAudioDataset(torch.utils.data.Dataset):
 
     def get(self, idx=None):
         """uncropped, untransformed getter with random sample feature"""
+        if idx is not None and idx > len(self.audio_files):
+            raise StopIteration
         if idx is None:
             idx = random.randrange(len(self))
         try:
+            logger.debug(f'Loading {self.audio_files.iloc[idx, :].values[0]}')
             waveform, sample_rate = librosa.load(
                 self.audio_files.iloc[idx, :].values[0], 
                 sr=self.sample_rate,
                 mono=self.channels == 1
             )
-        except audioread.exceptions.NoBackendError:
-            warnings.warn(f"Not able to load {self.audio_files.iloc[idx, :].values[0]}")
-            return self[random.randrange(len(self))]
+        except (audioread.exceptions.NoBackendError, ZeroDivisionError):
+            logger.warning(f"Not able to load {self.audio_files.iloc[idx, :].values[0]}, removing from dataset")
+            self.audio_files.drop(idx, inplace=True)
+            return self[idx]
 
         # add channel dimension IF loaded audio was mono
         waveform = torch.as_tensor(waveform)
