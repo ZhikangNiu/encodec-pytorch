@@ -33,7 +33,7 @@ model:
   target_bandwidths: [1.5, 3., 6., 12., 24.]
   sample_rate: 24_000
   channels: 1
-  train_discriminator: True
+  train_discriminator: 2/3
   audio_normalize: True
   filters: 32
   ratios: [8, 5, 4, 2]
