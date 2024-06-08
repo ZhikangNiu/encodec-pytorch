@@ -1,9 +1,10 @@
 # encodec-pytorch
-This is an unofficial implementation of the paper [High Fidelity Neural Audio Compression](https://arxiv.org/pdf/2210.13438.pdf) in PyTorch.
-
-The LibriTTS960h 24khz encodec checkpoint and disc checkpoint is release in https://huggingface.co/zkniu/encodec-pytorch/tree/main
-
-I hope we can get together to do something meaningful and rebuild encodec in this repo.
+>[!IMPORTANT]
+>This is an unofficial implementation of the paper [High Fidelity Neural Audio Compression](https://arxiv.org/pdf/2210.13438.pdf) in PyTorch.
+>
+>The LibriTTS960h 24khz encodec checkpoint and disc checkpoint is release in https://huggingface.co/zkniu/encodec-pytorch/tree/main
+>
+>I hope we can get together to do something meaningful and rebuild encodec in this repo.
 
 ## Introduction
 This repository is based on [encodec](https://github.com/facebookresearch/encodec) and [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer).
@@ -17,8 +18,10 @@ Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I hav
 - support warmup scheduler in training.
 - support the test script to test the model.
 - support tensorboard to monitor the training process.
-- support the 48khz model, thanks [@leoauri](https://github.com/leoauri).
-- support slurm training, thanks [@leoauri](https://github.com/leoauri). You can find all the training scripts in scripts folder
+- support the 48khz model, thanks [@leoauri](https://github.com/leoauri) in https://github.com/ZhikangNiu/encodec-pytorch/pull/22.
+- support slurm training, thanks [@leoauri](https://github.com/leoauri). in https://github.com/ZhikangNiu/encodec-pytorch/pull/22.
+- support loss balancer, thanks [@leoauri](https://github.com/leoauri). in https://github.com/ZhikangNiu/encodec-pytorch/pull/22.
+- You can find all the training scripts in scripts folder
 
 ## Enviroments
 The code is tested on the following environment:
@@ -108,12 +111,12 @@ python main.py -r -b [bandwidth] -f [INPUT_FILE] [OUTPUT_WAV_FILE] -m [MODEL_NAM
 ```
 main.py from the [encodec](https://github.com/facebookresearch/encodec) , you can use the `-h` to check the help information.
 
-### Acknowledgement
+## Acknowledgement
 Thanks to the following repositories:
 - [encodec](https://github.com/facebookresearch/encodec)
 - [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer)
 - [melgan-neurips](https://github.com/descriptinc/melgan-neurips): audio_to_mel.py
 
-### LICENSE
+## LICENSE
 The code is same as [encodec](https://github.com/facebookresearch/encodec) LICENSE.
 
