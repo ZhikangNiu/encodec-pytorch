@@ -1,6 +1,9 @@
 import logging
 import os
 import warnings
+from collections import defaultdict
+import random
+from pathlib import Path
 
 import hydra
 import torch
@@ -8,6 +11,7 @@ import torch.distributed as dist
 import torch.optim as optim
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
+import torchaudio
 
 import customAudioDataset as data
 from customAudioDataset import collate_fn
@@ -17,6 +21,7 @@ from msstftd import MultiScaleSTFTDiscriminator
 from scheduler import WarmupCosineLrScheduler
 from utils import (count_parameters, save_master_checkpoint, set_seed,
                    start_dist_train)
+from balancer import Balancer
 
 warnings.filterwarnings("ignore")
 
@@ -24,7 +29,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Define train one step function
-def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,scaler=None,scaler_disc=None,writer=None):
+def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloader,config,scheduler,disc_scheduler,scaler=None,scaler_disc=None,writer=None,balancer=None):
     """train one step function
 
     Args:
@@ -43,57 +48,77 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
     disc_model.train()
     data_length=len(trainloader)
     # Initialize variables to accumulate losses  
-    accumulated_loss_g = 0.0  
-    accumulated_loss_w = 0.0  
+    accumulated_loss_g = 0.0
+    accumulated_losses_g = defaultdict(float)
+    accumulated_loss_w = 0.0
     accumulated_loss_disc = 0.0
 
     for idx,input_wav in enumerate(trainloader):
         # warmup learning rate, warmup_epoch is defined in config file,default is 5
         input_wav = input_wav.contiguous().cuda() #[B, 1, T]: eg. [2, 1, 203760]
         optimizer.zero_grad()
+        with autocast(enabled=config.common.amp):
+            output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
+            logits_real, fmap_real = disc_model(input_wav)
+            logits_fake, fmap_fake = disc_model(output)
+            losses_g = total_loss(
+                fmap_real, 
+                logits_fake, 
+                fmap_fake, 
+                input_wav, 
+                output, 
+                sample_rate=config.model.sample_rate,
+            ) 
         if config.common.amp: 
-            with autocast():
-                output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
-                logits_real, fmap_real = disc_model(input_wav)
-                logits_fake, fmap_fake = disc_model(output)
-                loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
-                loss = loss_g + loss_w
+            loss = 3*losses_g['l_g'] + 3*losses_g['l_feat'] + losses_g['l_t']/10 + losses_g['l_f']  + loss_w
+            # not implementing loss balancer in this section, since they say amp is not working anyway:
+            # https://github.com/ZhikangNiu/encodec-pytorch/issues/21#issuecomment-2122593367
             scaler.scale(loss).backward()  
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  
             scaler.step(optimizer)  
             scaler.update()   
+            # BUG: doesn't this get done later anyway?
             scheduler.step()  
         else:
-            output, loss_w, _ = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
-            logits_real, fmap_real = disc_model(input_wav)
-            logits_fake, fmap_fake = disc_model(output)
-            loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
-            loss = loss_g + loss_w
-            loss.backward()
+            # They say they use multiple backwards calls, and lambda_w is 1...
+            # https://github.com/facebookresearch/encodec/issues/20
+            if balancer is not None:
+                balancer.backward(losses_g, output, retain_graph=True)
+                # naive loss summation for metrics below
+                loss_g = sum([l * balancer.weights[k] for k, l in losses_g.items()])
+            else:
+                # without balancer: loss = 3*l_g + 3*l_feat + (l_t / 10) + l_f
+                # loss_g = torch.tensor([0.0], device='cuda', requires_grad=True)
+                loss_g = 3*losses_g['l_g'] + 3*losses_g['l_feat'] + losses_g['l_t']/10 + losses_g['l_f'] 
+                loss_g.backward()
+            loss_w.backward()
             optimizer.step()
-        
+
         # Accumulate losses  
-        accumulated_loss_g += loss_g.item()  
+        accumulated_loss_g += loss_g.item()
+        for k, l in losses_g.items():
+            accumulated_losses_g[k] += l.item()
         accumulated_loss_w += loss_w.item()
-        
+
+        # only update discriminator with probability from paper (configure)
         optimizer_disc.zero_grad()
-        if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
+        train_discriminator = (config.model.train_discriminator 
+                               and epoch >= config.lr_scheduler.warmup_epoch 
+                               and random.random() < float(config.model.train_discriminator))
+        if train_discriminator:
+            with autocast(enabled=config.common.amp):
+                logits_real, _ = disc_model(input_wav)
+                logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
+                loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
             if config.common.amp: 
-                with autocast():
-                    logits_real, _ = disc_model(input_wav)
-                    logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
-                    loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
                 scaler_disc.scale(loss_disc).backward()
                 # torch.nn.utils.clip_grad_norm_(disc_model.parameters(), 1.0)    
                 scaler_disc.step(optimizer_disc)  
                 scaler_disc.update()  
             else:
-                logits_real, _ = disc_model(input_wav)
-                logits_fake, _ = disc_model(output.detach()) # detach to avoid backpropagation to model
-                loss_disc = disc_loss(logits_real, logits_fake)
                 loss_disc.backward() 
                 optimizer_disc.step()
-            
+
             # Accumulate discriminator loss  
             accumulated_loss_disc += loss_disc.item()
         scheduler.step()
@@ -104,6 +129,8 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
                 f"Epoch {epoch} {idx+1}/{data_length}\tAvg loss_G: {accumulated_loss_g / (idx + 1):.4f}\tAvg loss_W: {accumulated_loss_w / (idx + 1):.4f}\tlr_G: {optimizer.param_groups[0]['lr']:.6e}\tlr_D: {optimizer_disc.param_groups[0]['lr']:.6e}\t"  
             ) 
             writer.add_scalar('Train/Loss_G', accumulated_loss_g / (idx + 1), (epoch-1) * len(trainloader) + idx)  
+            for k, l in accumulated_losses_g.items():
+                writer.add_scalar(f'Train/{k}', l / (idx + 1), (epoch-1) * len(trainloader) + idx)
             writer.add_scalar('Train/Loss_W', accumulated_loss_w / (idx + 1), (epoch-1) * len(trainloader) + idx) 
             if config.model.train_discriminator and epoch >= config.lr_scheduler.warmup_epoch:
                 log_msg += f"loss_disc: {accumulated_loss_disc / (idx + 1) :.4f}"  
@@ -111,25 +138,38 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
             logger.info(log_msg) 
 
 @torch.no_grad()
-def test(epoch,model, disc_model, testloader,config,writer):
+def test(epoch, model, disc_model, testloader, config, writer):
     model.eval()
-    for idx,input_wav in enumerate(testloader):
-        input_wav = input_wav.cuda() #[B, 1, T]: eg. [2, 1, 203760]
+    for idx, input_wav in enumerate(testloader):
+        input_wav = input_wav.cuda()
 
-        output = model(input_wav) #output: [B, 1, T]: eg. [2, 1, 203760] | loss_w: [1] 
+        output = model(input_wav)
         logits_real, fmap_real = disc_model(input_wav)
         logits_fake, fmap_fake = disc_model(output)
         loss_disc = disc_loss(logits_real, logits_fake) # compute discriminator loss
-        loss_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
+        losses_g = total_loss(fmap_real, logits_fake, fmap_fake, input_wav, output) 
 
     if not config.distributed.data_parallel or dist.get_rank()==0:
-        log_msg = (f'| TEST | epoch: {epoch} | loss_g: {loss_g.item():.4f} | loss_disc: {loss_disc.item():.4f}') 
-        writer.add_scalar('Test/Loss_G', loss_g.item(), epoch)  
-        writer.add_scalar('Test/Loss_Disc',loss_disc.item(), epoch)
-        logger.info(log_msg) 
+        log_msg = (f'| TEST | epoch: {epoch} | loss_g: {sum([l.item() for l in losses_g.values()])} | loss_disc: {loss_disc.item():.4f}') 
+        for k, l in losses_g.items():
+            writer.add_scalar(f'Test/{k}', l.item(), epoch)  
+        writer.add_scalar('Test/Loss_Disc', loss_disc.item(), epoch)
+        logger.info(log_msg)
+
+        # save a sample reconstruction (not cropped)
+        input_wav, _ = testloader.dataset.get()
+        input_wav = input_wav.cuda()
+        output = model(input_wav.unsqueeze(0)).squeeze(0)
+        # summarywriter can't log stereo files 😅 so just save examples
+        sp = Path(config.checkpoint.save_folder)
+        torchaudio.save(sp/f'GT.wav', input_wav.cpu(), config.model.sample_rate)
+        torchaudio.save(sp/f'Reconstruction.wav', output.cpu(), config.model.sample_rate)
 
 def train(local_rank,world_size,config,tmp_file=None):
     """train main function."""
+    # remove the logging handler "somebody" added
+    logger.handlers.clear()
+
     # set logger
     file_handler = logging.FileHandler(f"{config.checkpoint.save_folder}/train_encodec_bs{config.datasets.batch_size}_lr{config.optimization.lr}.log")
     formatter = logging.Formatter('%(asctime)s: %(levelname)s: [%(filename)s: %(lineno)d]: %(message)s')
@@ -147,23 +187,28 @@ def train(local_rank,world_size,config,tmp_file=None):
     # set seed
     if config.common.seed is not None:
         set_seed(config.common.seed)
-    
+
     # set train dataset
     trainset = data.CustomAudioDataset(config=config)
     testset = data.CustomAudioDataset(config=config,mode='test')
     # set encodec model and discriminator model
     model = EncodecModel._get_model(
-                config.model.target_bandwidths, 
-                config.model.sample_rate, 
-                config.model.channels,
-                causal=False, model_norm='time_group_norm', 
-                audio_normalize=config.model.audio_normalize,
-                segment=None, name='my_encodec',
-                ratios=config.model.ratios)
-    disc_model = MultiScaleSTFTDiscriminator(filters=config.model.filters,
-                                             hop_lengths=config.model.disc_hop_lengths,
-                                             win_lengths=config.model.disc_win_lengths,
-                                             n_ffts=config.model.disc_n_ffts)
+        config.model.target_bandwidths, 
+        config.model.sample_rate, 
+        config.model.channels,
+        causal=config.model.causal, model_norm=config.model.norm, 
+        audio_normalize=config.model.audio_normalize,
+        segment=config.model.segment, name=config.model.name,
+        ratios=config.model.ratios,
+    )
+    disc_model = MultiScaleSTFTDiscriminator(
+        in_channels=config.model.channels,
+        out_channels=config.model.channels,
+        filters=config.model.filters,
+        hop_lengths=config.model.disc_hop_lengths,
+        win_lengths=config.model.disc_win_lengths,
+        n_ffts=config.model.disc_n_ffts,
+    )
 
     # log model, disc model parameters and train mode
     logger.info(model)
@@ -215,13 +260,13 @@ def train(local_rank,world_size,config,tmp_file=None):
                 init_method=distributed_init_method,
                 rank=local_rank,
                 world_size=world_size)
-            
+
         torch.cuda.set_device(local_rank) 
         torch.cuda.empty_cache()
         # set distributed sampler
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
         test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
-    
+
     model.cuda()
     disc_model.cuda()
 
@@ -237,7 +282,7 @@ def train(local_rank,world_size,config,tmp_file=None):
         sampler=test_sampler, 
         shuffle=False, collate_fn=collate_fn,
         pin_memory=config.datasets.pin_memory)
-    logger.info(f"There are {len(trainloader)} data to train the EnCodec ")
+    logger.info(f"There are {len(trainloader)} data to train the EnCodec")
     logger.info(f"There are {len(testloader)} data to test the EnCodec")
 
     # set optimizer and scheduler, warmup scheduler
@@ -276,14 +321,20 @@ def train(local_rank,world_size,config,tmp_file=None):
             find_unused_parameters=config.distributed.find_unused_parameters)
     if not config.distributed.data_parallel or dist.get_rank() == 0:  
         writer = SummaryWriter(log_dir=f'{config.checkpoint.save_folder}/runs')  
+        logger.info(f'Saving tensorboard logs to {Path(writer.log_dir).resolve()}')
     else:  
         writer = None  
     start_epoch = max(1,resume_epoch+1) # start epoch is 1 if not resume
+    # instantiate loss balancer
+    balancer = Balancer(dict(config.balancer.weights)) if hasattr(config, 'balancer') else None
+    if balancer:
+        logger.info(f'Loss balancer with weights {balancer.weights} instantiated')
+    test(0, model, disc_model, testloader, config, writer)
     for epoch in range(start_epoch, config.common.max_epoch+1):
         train_one_step(
             epoch, optimizer, optimizer_disc, 
             model, disc_model, trainloader,config,
-            scheduler,disc_scheduler,scaler,scaler_disc,writer)
+            scheduler,disc_scheduler,scaler,scaler_disc,writer,balancer)
         if epoch % config.common.test_interval == 0:
             test(epoch,model,disc_model,testloader,config,writer)
         # save checkpoint and epoch

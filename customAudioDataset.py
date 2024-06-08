@@ -4,6 +4,10 @@ import random
 import librosa
 import pandas as pd
 import torch
+import audioread
+
+import logging
+logger = logging.getLogger(__name__)
 
 from utils import convert_audio
 
@@ -24,14 +28,39 @@ class CustomAudioDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.fixed_length if self.fixed_length and len(self.audio_files) > self.fixed_length else len(self.audio_files)  
 
+    def get(self, idx=None):
+        """uncropped, untransformed getter with random sample feature"""
+        if idx is not None and idx > len(self.audio_files):
+            raise StopIteration
+        if idx is None:
+            idx = random.randrange(len(self))
+        try:
+            logger.debug(f'Loading {self.audio_files.iloc[idx, :].values[0]}')
+            waveform, sample_rate = librosa.load(
+                self.audio_files.iloc[idx, :].values[0], 
+                sr=self.sample_rate,
+                mono=self.channels == 1
+            )
+        except (audioread.exceptions.NoBackendError, ZeroDivisionError):
+            logger.warning(f"Not able to load {self.audio_files.iloc[idx, :].values[0]}, removing from dataset")
+            self.audio_files.drop(idx, inplace=True)
+            return self[idx]
+
+        # add channel dimension IF loaded audio was mono
+        waveform = torch.as_tensor(waveform)
+        if len(waveform.shape) == 1:
+            waveform = waveform.unsqueeze(0)
+            waveform = waveform.expand(self.channels, -1)
+
+        return waveform, sample_rate
+
     def __getitem__(self, idx):
         # waveform, sample_rate = torchaudio.load(self.audio_files.iloc[idx, :].values[0])
         # """you can preprocess the waveform's sample rate to save time and memory"""
         # if sample_rate != self.sample_rate:
         #     waveform = convert_audio(waveform, sample_rate, self.sample_rate, self.channels)
-        waveform,sample_rate = librosa.load(self.audio_files.iloc[idx, :].values[0],sr=self.sample_rate)
-        waveform = torch.as_tensor(waveform).unsqueeze(0)
- 
+        waveform, sample_rate = self.get(idx)
+
         if self.transform:
             waveform = self.transform(waveform)
 
@@ -42,7 +71,7 @@ class CustomAudioDataset(torch.utils.data.Dataset):
                 return waveform, sample_rate
             else:
                 return waveform, sample_rate
-        
+
 
 def pad_sequence(batch):
     # Make all tensor in a batch the same length by padding with zeros

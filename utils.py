@@ -11,7 +11,6 @@ import typing as tp
 from hashlib import sha256
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import soundfile as sf
@@ -194,8 +193,9 @@ def collect_audio_durations(csv_files,output_path='./audio_durations.csv'):
         durations.append(duration)
     duration_data = pd.DataFrame({'filename': audio_files, 'duration': durations})
     duration_data.to_csv(output_path, index=False)  
-  
+
 def plot_audio_durations(duration_csv, boundaries, output_filename='audio_durations.png'):  
+    import matplotlib.pyplot as plt
     duration_csv = Path(duration_csv)  
     assert duration_csv.exists(), "duration_csv isn't exists, need to use collect_audio_durations()"  
     # 读取音频时长数据  

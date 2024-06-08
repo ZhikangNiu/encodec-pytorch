@@ -33,13 +33,17 @@ model:
   target_bandwidths: [1.5, 3., 6., 12., 24.]
   sample_rate: 24_000
   channels: 1
-  train_discriminator: True
+  train_discriminator: 2/3
   audio_normalize: True
   filters: 32
   ratios: [8, 5, 4, 2]
   disc_win_lengths: [1024, 2048, 512]
   disc_hop_lengths: [256, 512, 128]
   disc_n_ffts: [1024, 2048, 512]
+  causal: True
+  norm: 'weight_norm'
+  segment: None
+  name: 'my_encodec'
 
 distributed:
   data_parallel: True
@@ -48,6 +52,11 @@ distributed:
   torch_distributed_debug: False
   init_method: tmp
 
-
+balancer:
+  weights:
+    l_t: 0.1
+    l_f: 1
+    l_g: 3
+    l_feat: 3
 
 

@@ -32,8 +32,12 @@ class Audio2Mel(nn.Module):
         self.n_mel_channels = n_mel_channels
 
     def forward(self, audioin):
+        # turn each channel into a batch
+        shape = audioin.shape
+        if len(shape) > 2:
+            audioin = audioin.reshape(shape[0] * shape[1], -1)
         p = (self.n_fft - self.hop_length) // 2
-        audio = F.pad(audioin, (p, p), "reflect").squeeze(1)
+        audio = F.pad(audioin, (p, p), "reflect")
         fft = torch.stft(
             audio,
             n_fft=self.n_fft,
@@ -45,4 +49,7 @@ class Audio2Mel(nn.Module):
         )
         mel_output = torch.matmul(self.mel_basis, torch.sum(torch.pow(fft, 2), dim=[-1]))
         log_mel_spec = torch.log10(torch.clamp(mel_output, min=1e-5))
+        # restore original shape [B, H, T]
+        if len(shape) > 2:
+            log_mel_spec = log_mel_spec.reshape(shape[0], shape[1], -1)
         return log_mel_spec
