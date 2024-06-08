@@ -11,20 +11,20 @@ This repository is based on [encodec](https://github.com/facebookresearch/encode
 Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I have made the following changes:
 - support multi-gpu training.
 - support AMP training (you need to reduce learning rate and scale vq epsilon from 1e-5 to 1e-3, the reason you can check [issue 8](https://github.com/ZhikangNiu/encodec-pytorch/issues/8))
+  - Couldn't work, so don't use amp
 - support hydra configuration management.
 - align the loss functions and hyperparameters.
 - support warmup scheduler in training.
 - support the test script to test the model.
 - support tensorboard to monitor the training process.
-
-TODO:
-- [ ] support the 48khz model.
+- support the 48khz model, thanks [@leoauri](https://github.com/leoauri).
+- support slurm training, thanks [@leoauri](https://github.com/leoauri). You can find all the training scripts in scripts folder
 
 ## Enviroments
 The code is tested on the following environment:
 - Python 3.9
 - PyTorch 2.0.0 / PyTorch 1.13
-- GeForce RTX 3090 x 4 / V100-16G x 8 / A40 x 3
+- GeForce RTX 3090 x 4 / V100-16G x 8 / A40 x 3 / A100 x 1
 
 In order to you can run the code, you can install the environment by the help of requirements.txt.
 
