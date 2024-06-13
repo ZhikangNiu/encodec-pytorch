@@ -18,7 +18,7 @@ Based on the [EnCodec_Trainer](https://github.com/Mikxox/EnCodec_Trainer), I hav
 - support warmup scheduler in training.
 - support the test script to test the model.
 - support tensorboard to monitor the training process.
-- support the 48khz model, thanks [@leoauri](https://github.com/leoauri) in https://github.com/ZhikangNiu/encodec-pytorch/pull/22.
+- support 48khz and stereo models, thanks [@leoauri](https://github.com/leoauri) in https://github.com/ZhikangNiu/encodec-pytorch/pull/22.
 - support slurm training, thanks [@leoauri](https://github.com/leoauri). in https://github.com/ZhikangNiu/encodec-pytorch/pull/22.
 - support loss balancer, thanks [@leoauri](https://github.com/leoauri). in https://github.com/ZhikangNiu/encodec-pytorch/pull/22.
 - You can find all the training scripts in scripts folder
@@ -94,6 +94,10 @@ Note:
     ``` 
 11. When you try to use amp training, you need to reduce learning rate and scale vq epsilon from 1e-5 to 1e-3, the reason you can check [issue 8](https://github.com/ZhikangNiu/encodec-pytorch/issues/8)
 12. I suggest you need to focus on the generator loss, the commit loss it could be not converge, you can check some objective metrics about pesq, stoi.
+
+#### Slurm
+Usage will depend on your cluster setup, but see `scripts/train.sbatch` for an example. This uses a container with the dependencies installed. Run `sbatch scripts/train.sbatch` from the repository root to use.
+
 ### Test
 I have add a shell script to compress and decompress the audio by different bandwidth, you can use the `compression.sh` to test your model. 
 
