@@ -9,9 +9,9 @@ common:
 datasets:
   train_csv_path: '/mnt/lustre/sjtu/home/zkn02/train_encodec/datasets/libritts_train100h.csv'
   test_csv_path: '/mnt/lustre/sjtu/home/zkn02/train_encodec/datasets/LibriTTS_dev-other.csv'
-  batch_size: 2
-  tensor_cut: 3200000
-  num_workers: 0
+  batch_size: 12
+  tensor_cut: 72000
+  num_workers: 4
   fixed_length: 0
   pin_memory: True
 
@@ -33,7 +33,7 @@ model:
   target_bandwidths: [1.5, 3., 6., 12., 24.]
   sample_rate: 24_000
   channels: 1
-  train_discriminator: 2/3
+  train_discriminator: True # you can set it to 2/3 and other number to train discriminator only
   audio_normalize: True
   filters: 32
   ratios: [8, 5, 4, 2]
@@ -50,7 +50,7 @@ distributed:
   world_size: 4
   find_unused_parameters: False
   torch_distributed_debug: False
-  init_method: tmp
+  init_method: tcp
 
 balancer:
   weights:

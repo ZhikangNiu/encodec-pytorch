@@ -3,10 +3,11 @@ ENCODEC_SET=encodec320x_ratios8542
 BATCH_SIZE=6
 MAX_EPOCH=150
 TENSOR_CUT=72000
-WARMUP_EPOCH=1
+WARMUP_EPOCH=5 # training begin epoch 1, so warmup_epoch=1 means no warmup and you need to set it to 2 at least.
 DATASET=lt960
 LR=3e-4
-python train_multi_gpu.py distributed.data_parallel=False \
+python ${CODE_ROOT}/train_multi_gpu.py \
+                    distributed.data_parallel=true \
                     common.save_interval=1 \
                     common.test_interval=1 \
                     common.max_epoch=${MAX_EPOCH} \
@@ -25,4 +26,5 @@ python train_multi_gpu.py distributed.data_parallel=False \
                     hydra.run.dir=/home/v-zhikangniu/encodec-pytorch/outputs/${ENCODEC_SET}_${DATASET}_bs${BATCH_SIZE}_tc$((${TENSOR_CUT} / 1000))_lr${LR}_wup${WARMUP_EPOCH} \
                     model.disc_n_ffts=[2048,1024,512,256,128] \
                     model.disc_win_lengths=[2048,1024,512,256,128] \
-                    model.disc_hop_lengths=[512,256,128,64,32]
+                    model.disc_hop_lengths=[512,256,128,64,32] \
+                    model.train_discriminator=2/3

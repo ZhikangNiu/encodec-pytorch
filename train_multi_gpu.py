@@ -102,9 +102,13 @@ def train_one_step(epoch,optimizer,optimizer_disc, model, disc_model, trainloade
 
         # only update discriminator with probability from paper (configure)
         optimizer_disc.zero_grad()
-        train_discriminator = (config.model.train_discriminator 
+        train_discriminator = torch.BoolTensor([config.model.train_discriminator 
                                and epoch >= config.lr_scheduler.warmup_epoch 
-                               and random.random() < float(config.model.train_discriminator))
+                               and random.random() < float(eval(config.model.train_discriminator))]).cuda()
+        # fix https://github.com/ZhikangNiu/encodec-pytorch/issues/30
+        if dist.is_initialized():
+            dist.broadcast(train_discriminator, 0)
+
         if train_discriminator:
             with autocast(enabled=config.common.amp):
                 logits_real, _ = disc_model(input_wav)
@@ -198,7 +202,7 @@ def train(local_rank,world_size,config,tmp_file=None):
         config.model.channels,
         causal=config.model.causal, model_norm=config.model.norm, 
         audio_normalize=config.model.audio_normalize,
-        segment=config.model.segment, name=config.model.name,
+        segment=eval(config.model.segment), name=config.model.name,
         ratios=config.model.ratios,
     )
     disc_model = MultiScaleSTFTDiscriminator(
